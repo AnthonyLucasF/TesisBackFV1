@@ -1,14 +1,15 @@
+// src/routes/pelado.routes.js
 import { Router } from "express";
-import { getChofer, getChoferxid, postChofer, putChofer, pathChofer, deleteChofer } from '../controladores/choferCtrl.js'
+import { getPelado, getPeladoxid, postPelado, putPelado, pathPelado, deletePelado } from '../controladores/peladoCtrl.js'
 
 const router = Router()
 
-//Armar nuestras rutas
-router.get('/chofer', getChofer) //SELECT
-router.get('/chofer/:id', getChoferxid) //SELECT x ID
-router.post('/chofer', postChofer) //INSERT
-router.put('/chofer/:id', putChofer) //UPDATE
-router.patch('/chofer/:id', pathChofer) //UPDATE
-router.delete('/chofer/:id', deleteChofer) //DELETE
+// Rutas para pelado
+router.get('/pelado', getPelado)
+router.get('/pelado/:id', getPeladoxid)
+router.post('/pelado', postPelado)
+router.put('/pelado/:id', putPelado)
+router.patch('/pelado/:id', pathPelado)
+router.delete('/pelado/:id', deletePelado)
 
 export default router

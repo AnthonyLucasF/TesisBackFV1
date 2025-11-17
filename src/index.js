@@ -1,3 +1,4 @@
+// src/index.js
 import app from './app.js';
 import { PORT } from './config.js'; // Asegúrate que PORT sea 3000
 import http from 'http';

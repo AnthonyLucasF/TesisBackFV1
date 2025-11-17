@@ -1,14 +1,19 @@
-import { Router } from "express";
-import { getChofer, getChoferxid, postChofer, putChofer, pathChofer, deleteChofer } from '../controladores/choferCtrl.js'
+import { Router } from 'express';
+import {
+  getDescabezado,
+  getDescabezadoxid,
+  postDescabezado,
+  putDescabezado,
+  pathDescabezado,
+  deleteDescabezado
+} from '../controladores/descabezadoCtrl.js';
+const router = Router();
 
-const router = Router()
+router.get('/descabezado', getDescabezado);
+router.get('/descabezado/:id', getDescabezadoxid);
+router.post('/descabezado', postDescabezado);
+router.put('/descabezado/:id', putDescabezado);
+router.patch('/descabezado/:id', pathDescabezado);
+router.delete('/descabezado/:id', deleteDescabezado);
 
-//Armar nuestras rutas
-router.get('/chofer', getChofer) //SELECT
-router.get('/chofer/:id', getChoferxid) //SELECT x ID
-router.post('/chofer', postChofer) //INSERT
-router.put('/chofer/:id', putChofer) //UPDATE
-router.patch('/chofer/:id', pathChofer) //UPDATE
-router.delete('/chofer/:id', deleteChofer) //DELETE
-
-export default router
+export default router;

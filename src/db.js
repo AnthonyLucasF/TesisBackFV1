@@ -1,3 +1,4 @@
+// src/db.js
 import { createPool } from "mysql2/promise";
 import {BD_HOST, DB_USER, DB_PASSWORD, BD_DATABASE, DB_PORT} from './config.js'
 
