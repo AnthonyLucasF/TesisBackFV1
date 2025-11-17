@@ -1,6 +1,6 @@
 import { conmysql } from "../db.js";
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
+import bcryptjs from 'bcryptjs';
 
 /* export const validarsesion = async (req, res) => {
     try {
@@ -52,7 +52,7 @@ export const validarsesion = async (req, res) => {
         const usuario = usuarios[0];
 
         // Comparar clave (después de migrar a bcrypt)
-        const esValido = await bcrypt.compare(usuario_clave, usuario.usuario_clave);
+        const esValido = await bcryptjs.compare(usuario_clave, usuario.usuario_clave);
 
         if (!esValido) {
             return res.status(401).json({ message: 'Contraseña incorrecta' });
