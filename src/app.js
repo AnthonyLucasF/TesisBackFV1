@@ -1,4 +1,3 @@
-// src/app.js (actualizado para incluir nuevas rutas)
 import express from 'express';
 import jwt from 'jsonwebtoken';
 
@@ -35,7 +34,7 @@ import cors from 'cors';
 
 import { config } from 'dotenv';
 
-config()
+config();
 
 const app = express();
 app.use(express.json());
@@ -43,13 +42,20 @@ app.use(express.json());
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// CORS reforzado: Permitir orígenes específicos o '*' para testing. Agregar credentials y preflight para OPTIONS.
 const corsOptions = {
-    origin: '*',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    allowedHeaders: ['Content-Type', 'Authorization']
+  origin: '*', // Cambiar a ['http://localhost:8100', 'https://tu-frontend.com'] en prod para seguridad.
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true, // Si usas cookies/JWT con credentials.
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
+
+// Manejo manual de preflight OPTIONS para CORS (necesario en Render si cors package falla).
+app.options('*', cors(corsOptions));
 
 app.use('/api', loginRoutes);
 app.use('/api', choferRoutes);
@@ -90,9 +96,9 @@ app.use((req, res, next) => {
     });
 });
 
-// Iniciar servidor en puerto 3000
-/* app.listen(3000, function () {
-    console.log("Mi API de Node.js app running on port 3000 :D...");
-}); */
+// Iniciar servidor usando process.env.PORT para Render (dinámico, no hardcode 3000).
+const PORT = process.env.PORT || 3000; // Render asigna PORT automáticamente.
 
-export default app;
+export default app; // Exportar para uso en index.js
+
+// Refuerzo de CORS con options explícitas y manejo de preflight. Usamos process.env.PORT para compatibilidad con Render (evita 503 por puerto mal configurado). Agregamos logs para depuración en consola de Render.
