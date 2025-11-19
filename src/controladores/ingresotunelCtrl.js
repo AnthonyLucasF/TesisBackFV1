@@ -114,6 +114,9 @@ export const postIngresoTunel = async (req, res) => {
       ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_observaciones
     } = req.body;
 
+    const [defecto] = await conmysql.query('SELECT clase_id, color_id FROM defectos WHERE lote_id = ? LIMIT 1', [lote_id]); //Revisar
+    const [calidad] = await conmysql.query('SELECT clase_id, color_id FROM control_calidad WHERE lote_id = ? LIMIT 1', [lote_id]); //Revisar
+
     if (!lote_id || !orden_id || !coche_id) return res.status(400).json({ message: "lote_id, orden_id y coche_id son requeridos" });
 
     // Obtener datos del lote para cálculo de rendimiento
