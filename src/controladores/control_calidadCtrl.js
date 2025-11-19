@@ -316,12 +316,20 @@ export const putControl_Calidad = async (req, res) => {
         : data.c_calidad_hora_control; // ya es HH:MM:SS
     }
 
-    // --- 2. Construir UPDATE dinámico ---
-    const campos = Object.keys(data);
-    const valores = Object.values(data);
+    // --- 2. Solo actualizar columnas que existen en la tabla ---
+    const columnasValidas = [
+      'usuario_id', 'lote_id', 'tipo_id', 'clase_id',
+      'c_calidad_hora_control', 'c_calidad_talla_real', 'c_calidad_talla_marcada',
+      'c_calidad_peso_bruto', 'c_calidad_peso_neto', 'c_calidad_cuenta_x_libra',
+      'c_calidad_total', 'c_calidad_uniformidad', 'c_calidad_olor', 'c_calidad_sabor',
+      'c_calidad_observaciones', 'defectos_id', 'color_id', 'proveedor_id'
+    ];
+
+    const campos = Object.keys(data).filter(c => columnasValidas.includes(c));
+    const valores = campos.map(c => data[c]);
 
     if (campos.length === 0) {
-      return res.status(400).json({ message: "No hay campos para actualizar" });
+      return res.status(400).json({ message: "No hay campos válidos para actualizar" });
     }
 
     const sql = `
@@ -336,13 +344,14 @@ export const putControl_Calidad = async (req, res) => {
       return res.status(404).json({ message: "Registro no encontrado" });
     }
 
-    // --- 3. Traer registro actualizado con joins ---
+    // --- 3. Traer registro actualizado con joins para mostrar datos completos ---
     const [registroActualizado] = await conmysql.query(`
       SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
       FROM control_calidad cc
       LEFT JOIN lote l ON cc.lote_id = l.lote_id
-      LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
+      LEFT JOIN proveedor p ON cc.proveedor_id = p.proveedor_id
       LEFT JOIN usuario u ON cc.usuario_id = u.usuario_id
+      LEFT JOIN defectos d ON cc.defectos_id = d.defectos_id
       WHERE cc.c_calidad_id = ?
     `, [id]);
 
@@ -358,6 +367,7 @@ export const putControl_Calidad = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // PATCH: actualización parcial
 export const pathControl_Calidad = async (req, res) => {
