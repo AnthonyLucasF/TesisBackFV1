@@ -298,31 +298,36 @@ export const postControl_Calidad = async (req, res) => {
 
 // PUT: actualización completa
 export const putControl_Calidad = async (req, res) => {
+  const { id } = req.params;
+  const data = req.body;
+
   try {
-    const { id } = req.params;
-    const data = req.body;
+    // --- Ajustar la hora si viene en formato ISO ---
+    if (data.c_calidad_hora_control) {
+      const hora = data.c_calidad_hora_control.split('T')[1] || data.c_calidad_hora_control;
+      data.c_calidad_hora_control = hora.substring(0, 8); // HH:MM:SS
+    }
 
     const campos = Object.keys(data);
     const valores = Object.values(data);
-    const setClause = campos.map(c => `${c}=?`).join(',');
 
-    const [result] = await conmysql.query(`UPDATE control_calidad SET ${setClause} WHERE c_calidad_id=?`, [...valores, id]);
+    const sql = `
+      UPDATE control_calidad
+      SET ${campos.map(c => `${c}=?`).join(', ')}
+      WHERE c_calidad_id=?
+    `;
 
-    if (result.affectedRows === 0) return res.status(404).json({ message: "Control de Calidad no encontrado" });
+    await conmysql.query(sql, [...valores, id]);
 
-    const [rows] = await conmysql.query(`
-      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
-      FROM control_calidad cc
-      LEFT JOIN lote l ON cc.lote_id = l.lote_id
-      LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
-      LEFT JOIN usuario u ON cc.usuario_id = u.usuario_id
-      WHERE cc.c_calidad_id = ?
-    `, [id]);
+    const [registroActualizado] = await conmysql.query(
+      `SELECT * FROM control_calidad WHERE c_calidad_id=?`, [id]
+    );
 
-    global._io.emit("control_calidad_actualizado", rows[0]);
-    res.json(rows[0]);
+    res.json(registroActualizado[0]);
+
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    console.error("Error en putControl_Calidad:", error);
+    res.status(500).json({ message: error.message });
   }
 };
 
