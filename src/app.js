@@ -25,8 +25,11 @@ import tallaRoutes from './routes/talla.routes.js';
 import tipoRoutes from './routes/tipo.routes.js';
 import usuarioRoutes from './routes/usuarios.routes.js';
 import vehiculoRoutes from './routes/vehiculo.routes.js';
-import descabezadoRoutes from './routes/descabezado.routes.js'; // Nueva
-import peladoRoutes from './routes/pelado.routes.js'; // Nueva
+import descabezadoRoutes from './routes/descabezado.routes.js';
+import peladoRoutes from './routes/pelado.routes.js';
+
+import gerenciaRoutes from './routes/gerencia.routes.js'; // M6 Órdenes
+import reportesRoutes from './routes/reportes.routes.js'; // M7 Reportes/Historial
 
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -80,12 +83,14 @@ app.use('/api', tallaRoutes);
 app.use('/api', tipoRoutes);
 app.use('/api', usuarioRoutes);
 app.use('/api', vehiculoRoutes);
-app.use('/api', descabezadoRoutes); // Nueva ruta
-app.use('/api', peladoRoutes); // Nueva ruta
+app.use('/api', descabezadoRoutes);
+app.use('/api', peladoRoutes);
+
+app.use('/api', gerenciaRoutes);     // M6 Órdenes
+app.use('/api', reportesRoutes);     // M7 Reportes/Historial
 
 app.get("/api", (req, res) => {
     res.json({
-        mensaje: "Hola Mundo en mi API :D",
         mensaje: "API RESTful de mi Tesis :D"
     });
 });

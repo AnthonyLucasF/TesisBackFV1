@@ -76,6 +76,21 @@ export const setupWebSocket = (io) => {
       socket.broadcast.emit("pelado_eliminado", data);
     });
 
+    socket.on("masterizado_nuevo", (data) => {
+      console.log("📦 Nuevo masterizado:", data);
+      socket.broadcast.emit("masterizado_nuevo", data);
+    });
+
+    socket.on("orden_generada", (data) => {
+      console.log("📦 Orden generada:", data);
+      socket.broadcast.emit("orden_generada", data);
+    });
+
+    socket.on("reporte_generado", (data) => {
+      console.log("📄 Reporte generado:", data);
+      socket.broadcast.emit("reporte_generado", data);
+    });
+
     socket.on("disconnect", () => {
       console.log("🔴 Cliente WebSocket desconectado");
     });

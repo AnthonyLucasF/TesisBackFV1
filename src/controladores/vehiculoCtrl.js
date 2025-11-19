@@ -1,31 +1,5 @@
 import { conmysql } from "../db.js";
 
-// SELECT: Obtener todos los registros
-/* export const getVehiculo =
-    async (req, res) => {
-        try {
-            const [result] = await conmysql.query('SELECT * FROM vehiculo');
-            res.json(result);
-        } catch (error) {
-            return res.status(500).json({ message: "Error al consultar Vehículos" });
-        }
-    }; */
-
-// SELECT por ID
-/* export const getVehiculoxid =
-    async (req, res) => {
-        try {
-            const [result] = await conmysql.query('SELECT * FROM vehiculo WHERE vehiculo_id=?', [req.params.id]);
-            if (result.length <= 0) return res.status(404).json({ 
-                vehiculo_id: 0,
-                message: "Vehículo no encontrado" 
-            });
-            res.json(result[0]);
-        } catch (error) {
-            return res.status(500).json({ message: "Error del Servidor" });
-        }
-    }; */
-
 // SELECT: Obtener todos los registros ordenados alfabéticamente por placa
 export const getVehiculo = async (req, res) => {
     try {
@@ -55,7 +29,10 @@ export const postVehiculo =
     async (req, res) => {
         try {
             const { vehiculo_placa, vehiculo_tipo, vehiculo_capacidad } = req.body;
-            //const imagen = req.file ? `/uploads/${req.file.filename}` : null;
+            if (vehiculo_placa.length > 10) throw new Error("Placa excede 10 caracteres"); //Revisar
+
+            const [existing] = await conmysql.query('SELECT * FROM vehiculo WHERE vehiculo_placa = ?', [vehiculo_placa]); //Revisar
+            if (existing.length > 0) return res.status(409).json({ message: "No se puede ingresar un vehículo con una placa ya existente" }); //Revisar
 
             const [rows] = await conmysql.query(
                 'INSERT INTO vehiculo (vehiculo_placa, vehiculo_tipo, vehiculo_capacidad) VALUES (?, ?, ?)',
