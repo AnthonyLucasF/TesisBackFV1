@@ -609,7 +609,7 @@ async function updateOrdenPendientes(orden_id, delta) {
 import { conmysql } from "../db.js";
 
 // SELECT: Obtener todos los registros ordenados descendente por fecha
-export const getIngresotunel = async (req, res) => {
+export const getIngresoTunel = async (req, res) => {
     try {
         const [result] = await conmysql.query('SELECT * FROM ingresotunel ORDER BY ingresotunel_fecha DESC');
         res.json(result);
@@ -619,7 +619,7 @@ export const getIngresotunel = async (req, res) => {
 };
 
 // SELECT por lote_id (para resumen entero/cola)
-export const getIngresotunelPorLote = async (req, res) => {
+export const getIngresoTunelPorLote = async (req, res) => {
     try {
         const { lote_id } = req.params;
         const [result] = await conmysql.query('SELECT * FROM ingresotunel WHERE lote_id = ? ORDER BY ingresotunel_fecha DESC', [lote_id]);
@@ -630,7 +630,7 @@ export const getIngresotunelPorLote = async (req, res) => {
 };
 
 // GET por ID with JOINs for descripciones (tipo, talla, peso, etc.)
-export const getIngresotunelxid = async (req, res) => {
+export const getIngresoTunelxid = async (req, res) => {
     try {
         const [result] = await conmysql.query(`
       SELECT i.*, 
@@ -654,7 +654,7 @@ export const getIngresotunelxid = async (req, res) => {
 };
 
 // POST: Crear nuevo ingreso, validar campos, actualizar orden pendientes, emitir WS
-export const postIngresotunel = async (req, res) => {
+export const postIngresoTunel = async (req, res) => {
     try {
         const {
             lote_id, orden_id, tipo_id, talla_id, peso_id,
@@ -702,7 +702,7 @@ export const postIngresotunel = async (req, res) => {
 };
 
 // PUT: Update completo, recalcular pendientes orden, emitir WS
-export const putIngresotunel = async (req, res) => {
+export const putIngresoTunel = async (req, res) => {
     try {
         const { id } = req.params;
         const {
@@ -749,7 +749,7 @@ export const putIngresotunel = async (req, res) => {
 };
 
 // DELETE: Eliminar, ajustar pendientes orden, emitir WS
-export const deleteIngresotunel = async (req, res) => {
+export const deleteIngresoTunel = async (req, res) => {
     try {
         const { id } = req.params;
 
