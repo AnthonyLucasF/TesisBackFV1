@@ -107,12 +107,23 @@ export const getControl_Calidadxid = async (req, res) => {
 export const postControl_Calidad = async (req, res) => {
   try {
     const data = req.body;
-    const campos = Object.keys(data).join(',');
-    const valores = Object.values(data);
-    const signos = valores.map(() => '?').join(',');
+
+    // Validación de campos obligatorios
+    const requiredFields = ['usuario_id', 'lote_id', 'tipo_id', 'clase_id'];
+    for (const field of requiredFields) {
+      if (!data[field]) {
+        return res.status(400).json({ message: `Falta el campo obligatorio: ${field}` });
+      }
+    }
+
+    // Convertir undefined a NULL
+    const campos = Object.keys(data);
+    const valores = campos.map(c => data[c] !== undefined ? data[c] : null);
+    const signos = campos.map(() => '?').join(',');
 
     const [insert] = await conmysql.query(
-      `INSERT INTO control_calidad (${campos}) VALUES (${signos})`, valores
+      `INSERT INTO control_calidad (${campos.join(',')}) VALUES (${signos})`,
+      valores
     );
 
     const nuevoId = insert.insertId;
@@ -124,11 +135,15 @@ export const postControl_Calidad = async (req, res) => {
       [codigo, nuevoId]
     );
 
-    const [nuevoRegistro] = await conmysql.query('SELECT * FROM control_calidad WHERE c_calidad_id=?', [nuevoId]);
+    const [nuevoRegistro] = await conmysql.query(
+      'SELECT * FROM control_calidad WHERE c_calidad_id=?', 
+      [nuevoId]
+    );
 
     global._io.emit("control_calidad_nuevo", nuevoRegistro[0]);
     res.json(nuevoRegistro[0]);
   } catch (error) {
+    console.error('Error POST control_calidad:', error);
     res.status(500).json({ message: error.message });
   }
 };
