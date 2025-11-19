@@ -272,6 +272,8 @@ export const getControl_Calidadxid = async (req, res) => {
 
 // POST: crear nuevo registro con código automático
 export const postControl_Calidad = async (req, res) => {
+  console.log("POST /control_calidad data:", req.body);
+
   try {
     const data = req.body;
 
