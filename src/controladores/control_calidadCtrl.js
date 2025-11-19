@@ -106,49 +106,30 @@ export const getControl_Calidadxid = async (req, res) => {
 
 export const postControl_Calidad = async (req, res) => {
   try {
-    const {
-      usuario_id, lote_id, tipo_id, clase_id, c_calidad_hora_control,c_calidad_talla_real, c_calidad_talla_marcada,
-      c_calidad_peso_bruto, c_calidad_peso_neto, c_calidad_cuenta_x_libra, c_calidad_total, c_calidad_uniformidad,
-      c_calidad_olor, c_calidad_sabor, c_calidad_observaciones, defectos_id, c_calidad_codigo, color_id
-    } = req.body;
+    const data = req.body;
+    const campos = Object.keys(data).join(',');
+    const valores = Object.values(data);
+    const signos = valores.map(() => '?').join(',');
 
-    const [loteDatos] = await pool.query(
-      'SELECT proveedor_id FROM lote WHERE lote_id = ?',
-      [lote_id]
+    const [insert] = await conmysql.query(
+      `INSERT INTO control_calidad (${campos}) VALUES (${signos})`, valores
     );
 
-    const proveedor_id = loteDatos[0]?.proveedor_id || null;
+    const nuevoId = insert.insertId;
+    const anio = new Date().getFullYear();
+    const codigo = `Cc-${String(nuevoId).padStart(3, '0')}-${anio}`;
 
-    const result = await pool.query(
-      `INSERT INTO control_calidad (
-        usuario_id, lote_id, tipo_id, clase_id, 
-        c_calidad_hora_control, c_calidad_talla_real, c_calidad_talla_marcada, 
-        c_calidad_peso_bruto, c_calidad_peso_neto, c_calidad_cuenta_x_libra, 
-        c_calidad_total, c_calidad_uniformidad, c_calidad_olor, c_calidad_sabor, 
-        c_calidad_observaciones, defectos_id, c_calidad_codigo, color_id, proveedor_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        usuario_id, lote_id, tipo_id, clase_id,
-        c_calidad_hora_control, c_calidad_talla_real, c_calidad_talla_marcada,
-        c_calidad_peso_bruto, c_calidad_peso_neto, c_calidad_cuenta_x_libra,
-        c_calidad_total, c_calidad_uniformidad, c_calidad_olor, c_calidad_sabor,
-        c_calidad_observaciones, defectos_id, c_calidad_codigo, color_id, proveedor_id
-      ]
+    await conmysql.query(
+      `UPDATE control_calidad SET c_calidad_codigo=? WHERE c_calidad_id=?`,
+      [codigo, nuevoId]
     );
 
-    res.json({
-      ok: true,
-      msg: 'Control de calidad registrado correctamente',
-      id: result.insertId
-    });
+    const [nuevoRegistro] = await conmysql.query('SELECT * FROM control_calidad WHERE c_calidad_id=?', [nuevoId]);
 
+    global._io.emit("control_calidad_nuevo", nuevoRegistro[0]);
+    res.json(nuevoRegistro[0]);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      ok: false,
-      msg: 'Error al registrar control de calidad',
-      error
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
