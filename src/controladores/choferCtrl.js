@@ -30,13 +30,6 @@ export const getChoferxid = async (req, res) => {
 export const postChofer = async (req, res) => {
     try {
         const { chofer_cedula, chofer_nombre, chofer_telefono, chofer_licencia, vehiculo_id } = req.body;
-        if (chofer_cedula.length > 13) throw new Error("Cédula excede 13 caracteres"); //Revisar
-        if (chofer_nombre.length > 100) throw new Error("Nombre excede 100 caracteres"); //Revisar
-        if (chofer_telefono.length > 15) throw new Error("Teléfono excede 15 caracteres"); //Revisar
-        if (chofer_licencia.length > 25) throw new Error("Licencia excede 25 caracteres"); //Revisar
-
-        const [existing] = await conmysql.query('SELECT * FROM chofer WHERE chofer_cedula = ?', [chofer_cedula]); //Revisar
-        if (existing.length > 0) return res.status(409).json({ message: "No se puede ingresar un chofer con una cédula ya existente" }); //Revisar
 
         const [rows] = await conmysql.query(
             'INSERT INTO chofer (chofer_cedula, chofer_nombre, chofer_telefono, chofer_licencia, vehiculo_id) VALUES (?, ?, ?, ?, ?)',
