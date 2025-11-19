@@ -16,7 +16,7 @@ import { conmysql } from "../db.js";
 }; */
 
 // GET listado con proveedor
-export const getControlCalidad = async (req, res) => {
+export const getControl_Calidad = async (req, res) => {
   try {
     const [result] = await conmysql.query(`
       SELECT cc.*, p.proveedor_nombre, d.defectos_lote_id AS defecto_lote
