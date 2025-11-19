@@ -28,14 +28,6 @@ export const getProveedorxid = async (req, res) => {
 export const postProveedor = async (req, res) => {
   try {
     const { proveedor_ruc, proveedor_codigo, proveedor_nombre, proveedor_camaronera, proveedor_contacto, proveedor_direccion } = req.body;
-    if (proveedor_ruc.length > 13) throw new Error("RUC excede 13 caracteres"); //Revisar
-    if (proveedor_camaronera.length > 100) throw new Error("Camaronera excede 100 caracteres"); //Revisar
-    if (proveedor_contacto.length > 100) throw new Error("Contacto excede 100 caracteres"); //Revisar
-    if (proveedor_direccion.length > 100) throw new Error("Dirección excede 100 caracteres"); //Revisar
-    if (proveedor_codigo.length > 15) throw new Error("Código excede 15 caracteres"); //Revisar
-
-    const [existing] = await conmysql.query('SELECT * FROM proveedor WHERE proveedor_ruc = ?', [proveedor_ruc]); //Revisar
-    if (existing.length > 0) return res.status(409).json({ message: "No se puede ingresar un proveedor con un RUC ya existente" }); //Revisar
 
     const [rows] = await conmysql.query(
       'INSERT INTO proveedor (proveedor_ruc, proveedor_codigo, proveedor_nombre, proveedor_camaronera, proveedor_contacto, proveedor_direccion) VALUES (?, ?, ?, ?, ?, ?)',

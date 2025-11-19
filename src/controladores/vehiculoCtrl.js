@@ -29,10 +29,6 @@ export const postVehiculo =
     async (req, res) => {
         try {
             const { vehiculo_placa, vehiculo_tipo, vehiculo_capacidad } = req.body;
-            if (vehiculo_placa.length > 10) throw new Error("Placa excede 10 caracteres"); //Revisar
-
-            const [existing] = await conmysql.query('SELECT * FROM vehiculo WHERE vehiculo_placa = ?', [vehiculo_placa]); //Revisar
-            if (existing.length > 0) return res.status(409).json({ message: "No se puede ingresar un vehículo con una placa ya existente" }); //Revisar
 
             const [rows] = await conmysql.query(
                 'INSERT INTO vehiculo (vehiculo_placa, vehiculo_tipo, vehiculo_capacidad) VALUES (?, ?, ?)',
