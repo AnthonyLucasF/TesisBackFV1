@@ -10,31 +10,6 @@ export const getLote = async (req, res) => {
     }
 };
 
-// GET por ID with JOINs for nombres
-/* export const getLotexid = async (req, res) => {
-  try {
-    const [result] = await conmysql.query(`
-      SELECT l.*, t.tipo_descripcion as lote_tipo_descripcion, 
-        v.vehiculo_placa as lote_vehiculo_placa, 
-        c.chofer_nombre as lote_chofer_nombre, 
-        p.proveedor_nombre as lote_proveedor_nombre, 
-        u.usuario_nombre as lote_usuario_nombre
-      FROM lote l
-      LEFT JOIN tipo t ON l.tipo_id = t.tipo_id
-      LEFT JOIN vehiculo v ON l.vehiculo_id = v.vehiculo_id
-      LEFT JOIN chofer c ON l.chofer_id = c.chofer_id
-      LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
-      LEFT JOIN usuario u ON l.usuario_id = u.usuario_id
-      WHERE l.lote_id = ?
-    `, [req.params.id]);
-    if (result.length <= 0) return res.status(404).json({ lote_id: 0, message: "Lote no encontrado" });
-    res.json(result[0]);
-  } catch (error) {
-    return res.status(500).json({ message: "Error del Servidor" });
-  }
-}; */
-
-
 // GET por ID with JOINs for nombres (tipo_descripcion, vehiculo_placa, chofer_nombre, proveedor_nombre, usuario_nombre)
 export const getLotexid = async (req, res) => {
     try {
@@ -45,12 +20,18 @@ export const getLotexid = async (req, res) => {
         ch.chofer_nombre as lote_chofer_nombre,
         p.proveedor_nombre as lote_proveedor_nombre,
         u.usuario_nombre as lote_usuario_nombre
+
+        c.chofer_nombre, v.vehiculo_placa
       FROM lote l
       LEFT JOIN tipo t ON l.tipo_id = t.tipo_id
       LEFT JOIN vehiculo v ON l.vehiculo_id = v.vehiculo_id
       LEFT JOIN chofer ch ON l.chofer_id = ch.chofer_id
       LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
       LEFT JOIN usuario u ON l.usuario_id = u.usuario_id
+
+      LEFT JOIN chofer c ON l.chofer_id = c.chofer_id
+      LEFT JOIN vehiculo v ON c.vehiculo_id = v.vehiculo_id
+
       WHERE l.lote_id = ?
     `, [req.params.id]);
         if (result.length <= 0) return res.status(404).json({ lote_id: 0, message: "Lote no encontrado" });

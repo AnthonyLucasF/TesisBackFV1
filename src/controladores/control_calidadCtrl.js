@@ -1,7 +1,7 @@
 import { conmysql } from "../db.js";
 
 // GET: Obtener todos ordenados descendente por hora (JOIN lote para fecha si needed)
-export const getControl_Calidad = async (req, res) => {
+/* export const getControl_Calidad = async (req, res) => {
   try {
     const [result] = await conmysql.query(`
       SELECT cc.*, l.lote_codigo, l.lote_fecha_ingreso
@@ -12,6 +12,21 @@ export const getControl_Calidad = async (req, res) => {
     res.json(result);
   } catch (error) {
     return res.status(500).json({ message: "Error al consultar Control de Calidad" });
+  }
+}; */
+
+// GET listado con proveedor
+export const getControlCalidad = async (req, res) => {
+  try {
+    const [result] = await conmysql.query(`
+      SELECT cc.*, p.proveedor_nombre, d.defectos_lote_id AS defecto_lote
+      FROM control_calidad cc
+      LEFT JOIN proveedor p ON cc.proveedor_id = p.proveedor_id
+      LEFT JOIN defectos d ON cc.defectos_id = d.defectos_id
+    `);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
