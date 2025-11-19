@@ -106,39 +106,17 @@ export const getControl_Calidadxid = async (req, res) => {
 
 export const postControl_Calidad = async (req, res) => {
   try {
-    const {
-      usuario_id, lote_id, tipo_id, clase_id,
-      c_calidad_hora_control, c_calidad_talla_real, c_calidad_talla_marcada,
-      c_calidad_peso_bruto, c_calidad_peso_neto, c_calidad_cuenta_x_libra,
-      c_calidad_total, c_calidad_uniformidad, c_calidad_olor, c_calidad_sabor,
-      c_calidad_observaciones, defectos_id, color_id
-    } = req.body;
-
-    if (!usuario_id || !lote_id || !tipo_id || !clase_id) {
-      return res.status(400).json({ message: "Faltan campos obligatorios" });
-    }
-
-    const horaControl = c_calidad_hora_control || new Date().toTimeString().slice(0, 8);
+    const data = req.body;
 
     const [insert] = await conmysql.query(
-      `INSERT INTO control_calidad 
-      (usuario_id, lote_id, tipo_id, clase_id, c_calidad_hora_control, c_calidad_talla_real,
-      c_calidad_talla_marcada, c_calidad_peso_bruto, c_calidad_peso_neto, c_calidad_cuenta_x_libra,
-      c_calidad_total, c_calidad_uniformidad, c_calidad_olor, c_calidad_sabor,
-      c_calidad_observaciones, defectos_id, color_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        usuario_id, lote_id, tipo_id, clase_id, horaControl,
-        c_calidad_talla_real, c_calidad_talla_marcada,
-        c_calidad_peso_bruto, c_calidad_peso_neto, c_calidad_cuenta_x_libra,
-        c_calidad_total, c_calidad_uniformidad, c_calidad_olor, c_calidad_sabor,
-        c_calidad_observaciones, defectos_id, color_id
-      ]
+      `INSERT INTO control_calidad SET ?`,
+      [data]
     );
 
     const nuevoId = insert.insertId;
+
     const anio = new Date().getFullYear();
-    const codigo = `Cc-${String(nuevoId).padStart(3, '0')}-${anio}`;
+    const codigo = `Cc-${String(nuevoId).padStart(3, "0")}-${anio}`;
 
     await conmysql.query(
       `UPDATE control_calidad SET c_calidad_codigo=? WHERE c_calidad_id=?`,
@@ -146,7 +124,7 @@ export const postControl_Calidad = async (req, res) => {
     );
 
     const [nuevoRegistro] = await conmysql.query(
-      'SELECT * FROM control_calidad WHERE c_calidad_id=?',
+      `SELECT * FROM control_calidad WHERE c_calidad_id=?`,
       [nuevoId]
     );
 
@@ -156,14 +134,13 @@ export const postControl_Calidad = async (req, res) => {
       id: nuevoId,
       codigo,
       message: "Control de Calidad registrado con éxito",
-      data: nuevoRegistro[0]
+      data: nuevoRegistro[0],
     });
 
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 };
-
 
 // PUT: Actualizar completo (sin cambios)
 export const putControl_Calidad = async (req, res) => {
