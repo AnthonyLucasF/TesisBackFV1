@@ -25,7 +25,7 @@ export const getVehiculoxid = async (req, res) => {
 };
 
 // INSERT: Crear un nuevo registro
-/* export const postVehiculo =
+export const postVehiculo =
     async (req, res) => {
         try {
             const { vehiculo_placa, vehiculo_tipo, vehiculo_capacidad } = req.body;
@@ -46,9 +46,9 @@ export const getVehiculoxid = async (req, res) => {
         } catch (error) {
             return res.status(500).json({ message: error.message });
         }
-    }; */
+    };
 
-export const postVehiculo = async (req, res) => {
+/* export const postVehiculo = async (req, res) => {
     try {
         const { vehiculo_placa, vehiculo_tipo } = req.body;
         if (vehiculo_placa.length > 10) throw new Error("Placa excede 10 caracteres");
@@ -65,7 +65,7 @@ export const postVehiculo = async (req, res) => {
     } catch (error) {
         return res.status(500).json({ message: error.message });
     }
-};
+};*/
 
 // UPDATE: Actualizar un registro completo
 export const putVehiculo =
