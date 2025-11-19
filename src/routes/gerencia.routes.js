@@ -4,6 +4,6 @@ import { getGerencia } from '../controladores/gerenciaCtrl.js'
 const router = Router()
 
 //Armar nuestras rutas
-router.get('/clase', getGerencia) //SELECT
+router.get('/orden', getGerencia) //SELECT
 
 export default router

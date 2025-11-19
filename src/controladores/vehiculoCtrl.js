@@ -25,7 +25,7 @@ export const getVehiculoxid = async (req, res) => {
 };
 
 // INSERT: Crear un nuevo registro
-export const postVehiculo =
+/* export const postVehiculo =
     async (req, res) => {
         try {
             const { vehiculo_placa, vehiculo_tipo, vehiculo_capacidad } = req.body;
@@ -46,7 +46,26 @@ export const postVehiculo =
         } catch (error) {
             return res.status(500).json({ message: error.message });
         }
-    };
+    }; */
+
+export const postVehiculo = async (req, res) => {
+    try {
+        const { vehiculo_placa, vehiculo_tipo } = req.body;
+        if (vehiculo_placa.length > 10) throw new Error("Placa excede 10 caracteres");
+
+        const [existing] = await conmysql.query('SELECT * FROM vehiculo WHERE vehiculo_placa = ?', [vehiculo_placa]);
+        if (existing.length > 0) return res.status(409).json({ message: "No se puede ingresar un vehículo con una placa ya existente" });
+
+        const [rows] = await conmysql.query(
+            'INSERT INTO vehiculo (vehiculo_placa, vehiculo_tipo) VALUES (?, ?)',
+            [vehiculo_placa, vehiculo_tipo]
+        );
+
+        res.json({ id: rows.insertId, message: "Vehículo registrado con éxito" });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
 
 // UPDATE: Actualizar un registro completo
 export const putVehiculo =

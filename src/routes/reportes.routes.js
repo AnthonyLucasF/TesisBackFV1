@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { getReporte } from '../controladores/reportesCtrl.js'
+import { getHistorialLote } from '../controladores/reportesCtrl.js'
 
 const router = Router()
 
 //Armar nuestras rutas
-router.get('/clase', getReporte) //SELECT
+router.get('/clase', getHistorialLote) //SELECT
 
 export default router
