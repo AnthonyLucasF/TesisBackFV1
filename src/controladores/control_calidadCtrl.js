@@ -19,10 +19,13 @@ import { conmysql } from "../db.js";
 export const getControl_Calidad = async (req, res) => {
   try {
     const [result] = await conmysql.query(`
-      SELECT cc.*, p.proveedor_nombre, d.defectos_lote_id AS defecto_lote
+      SELECT cc.*, l.lote_codigo, l.lote_fecha_ingreso,
+      p.proveedor_nombre, d.defectos_lote_id AS defecto_lote
       FROM control_calidad cc
       LEFT JOIN proveedor p ON cc.proveedor_id = p.proveedor_id
       LEFT JOIN defectos d ON cc.defectos_id = d.defectos_id
+      LEFT JOIN lote l ON cc.lote_id = l.lote_id
+      ORDER BY l.lote_fecha_ingreso DESC, cc.c_calidad_hora_control DESC
     `);
     res.json(result);
   } catch (error) {
