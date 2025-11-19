@@ -43,28 +43,28 @@ export const postDefectos = async (req, res) => {
       return res.status(400).json({ message: "Faltan campos obligatorios (lote_id, usuario_id)" });
     }
 
-    /*     const campos = Object.keys(data).join(',');
-        const valores = Object.values(data);
-        const signos = valores.map(() => '?').join(',');
-    
-        const [insert] = await conmysql.query(
-          `INSERT INTO defectos (${campos}) VALUES (${signos})`, valores
-        );
-    
-        const nuevoId = insert.insertId;
-        const anio = new Date().getFullYear();
-        const codigo = `Df-${String(nuevoId).padStart(3, '0')}-${anio}`; 
-    
-            await conmysql.query(
-          `UPDATE defectos SET defectos_codigo=? WHERE defectos_id=?`,
-          [codigo, nuevoId]
-        );*/
+    const campos = Object.keys(data).join(',');
+    const valores = Object.values(data);
+    const signos = valores.map(() => '?').join(',');
 
-    const id = rows.insertId;
-    const year = new Date().getFullYear();
-    const code = `Df-${String(id).padStart(3, '0')}-${year}`;
+    const [insert] = await conmysql.query(
+      `INSERT INTO defectos (${campos}) VALUES (${signos})`, valores
+    );
 
-    await conmysql.query('UPDATE defectos SET defectos_codigo = ? WHERE defectos_id = ?', [code, id]);
+    const nuevoId = insert.insertId;
+    const anio = new Date().getFullYear();
+    const codigo = `Df-${String(nuevoId).padStart(3, '0')}-${anio}`;
+
+    await conmysql.query(
+      `UPDATE defectos SET defectos_codigo=? WHERE defectos_id=?`,
+      [codigo, nuevoId]
+    );
+
+    /*     const id = rows.insertId;
+        const year = new Date().getFullYear();
+        const code = `Df-${String(id).padStart(3, '0')}-${year}`;
+    
+        await conmysql.query('UPDATE defectos SET defectos_codigo = ? WHERE defectos_id = ?', [code, id]); */
 
     const [nuevoDefecto] = await conmysql.query(`
       SELECT d.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre AS lote_proveedor_nombre, u.usuario_nombre
