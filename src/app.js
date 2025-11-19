@@ -85,6 +85,7 @@ app.use('/api', peladoRoutes); // Nueva ruta
 
 app.get("/api", (req, res) => {
     res.json({
+        mensaje: "Hola Mundo en mi API :D",
         mensaje: "API RESTful de mi Tesis :D"
     });
 });

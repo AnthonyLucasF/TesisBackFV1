@@ -1,5 +1,5 @@
 // src/ws/websocket.js
-console.log("Base de Datos en la nube Clever Cloud :)");
+console.log("Base de Datos en la nube Clever Cloud :D");
 
 export const setupWebSocket = (io) => {
   io.on("connection", (socket) => {
