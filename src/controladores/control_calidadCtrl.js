@@ -231,7 +231,7 @@ export const getControl_Calidadxid = async (req, res) => {
 };
 
 // POST: crear nuevo registro con código automático
-export const postControl_Calidad = async (req, res) => {
+/* export const postControl_Calidad = async (req, res) => {
   try {
     const data = req.body;
 
@@ -266,6 +266,73 @@ export const postControl_Calidad = async (req, res) => {
     global._io.emit("control_calidad_nuevo", nuevoRegistro[0]);
     res.json(nuevoRegistro[0]);
   } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+}; */
+
+// POST: crear nuevo registro con código automático
+export const postControl_Calidad = async (req, res) => {
+  try {
+    const data = req.body;
+
+    // --- 1. Validar campos obligatorios ---
+    const required = ['usuario_id', 'lote_id', 'tipo_id', 'clase_id'];
+    for (const f of required) {
+      if (!data[f]) {
+        return res.status(400).json({ message: `Falta el campo obligatorio: ${f}` });
+      }
+    }
+
+    // --- 2. Definir campos que vamos a insertar ---
+    const camposInsert = [
+      'usuario_id', 'lote_id', 'tipo_id', 'clase_id',
+      'c_calidad_hora_control', 'c_calidad_talla_real', 'c_calidad_talla_marcada',
+      'c_calidad_peso_bruto', 'c_calidad_peso_neto', 'c_calidad_cuenta_x_libra',
+      'c_calidad_total', 'c_calidad_uniformidad', 'c_calidad_olor', 'c_calidad_sabor',
+      'c_calidad_observaciones', 'defectos_id', 'color_id'
+    ];
+
+    const valores = camposInsert.map(c => data[c] !== undefined ? data[c] : null);
+
+    // --- 3. Insertar registro ---
+    const [insert] = await conmysql.query(
+      `INSERT INTO control_calidad (${camposInsert.join(',')}) VALUES (${camposInsert.map(() => '?').join(',')})`,
+      valores
+    );
+
+    const nuevoId = insert.insertId;
+    if (!nuevoId) {
+      return res.status(500).json({ message: "No se pudo generar el nuevo registro" });
+    }
+
+    // --- 4. Generar código automático ---
+    const anio = new Date().getFullYear();
+    const codigo = `Cc-${String(nuevoId).padStart(4, '0')}-${anio}`;
+
+    await conmysql.query(
+      `UPDATE control_calidad SET c_calidad_codigo=? WHERE c_calidad_id=?`,
+      [codigo, nuevoId]
+    );
+
+    // --- 5. Traer registro completo con joins ---
+    const [nuevoRegistro] = await conmysql.query(`
+      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
+      FROM control_calidad cc
+      LEFT JOIN lote l ON cc.lote_id = l.lote_id
+      LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
+      LEFT JOIN usuario u ON cc.usuario_id = u.usuario_id
+      WHERE cc.c_calidad_id = ?
+    `, [nuevoId]);
+
+    // --- 6. Emitir evento socket y responder ---
+    if (global._io) {
+      global._io.emit("control_calidad_nuevo", nuevoRegistro[0]);
+    }
+
+    res.status(201).json(nuevoRegistro[0]);
+
+  } catch (error) {
+    console.error("Error en postControl_Calidad:", error);
     return res.status(500).json({ message: error.message });
   }
 };
