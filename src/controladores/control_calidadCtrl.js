@@ -214,11 +214,12 @@ export const getControl_Calidad = async (req, res) => {
 export const getControl_Calidadxid = async (req, res) => {
   try {
     const [rows] = await conmysql.query(`
-      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
+      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre, d.defectos_codigo
       FROM control_calidad cc
       LEFT JOIN lote l ON cc.lote_id = l.lote_id
       LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
       LEFT JOIN usuario u ON cc.usuario_id = u.usuario_id
+      LEFT JOIN defectos d ON cc.defectos_id = d.defectos_id
       WHERE cc.c_calidad_id = ?
     `, [req.params.id]);
 
