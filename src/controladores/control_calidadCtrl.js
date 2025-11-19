@@ -296,20 +296,33 @@ export const postControl_Calidad = async (req, res) => {
   }
 };
 
-// PUT: actualización completa
+// PUT: actualizar un registro de control_calidad
 export const putControl_Calidad = async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id;
   const data = req.body;
 
+  console.log(`PUT /control_calidad/${id} data:`, data);
+
   try {
-    // --- Ajustar la hora si viene en formato ISO ---
-    if (data.c_calidad_hora_control) {
-      const hora = data.c_calidad_hora_control.split('T')[1] || data.c_calidad_hora_control;
-      data.c_calidad_hora_control = hora.substring(0, 8); // HH:MM:SS
+    if (!id) {
+      return res.status(400).json({ message: "Falta el ID del registro a actualizar" });
     }
 
+    // --- 1. Convertir c_calidad_hora_control a formato HH:MM:SS si viene en ISO ---
+    if (data.c_calidad_hora_control) {
+      const parts = data.c_calidad_hora_control.split('T');
+      data.c_calidad_hora_control = parts.length > 1
+        ? parts[1].substring(0, 8)  // HH:MM:SS
+        : data.c_calidad_hora_control; // ya es HH:MM:SS
+    }
+
+    // --- 2. Construir UPDATE dinámico ---
     const campos = Object.keys(data);
     const valores = Object.values(data);
+
+    if (campos.length === 0) {
+      return res.status(400).json({ message: "No hay campos para actualizar" });
+    }
 
     const sql = `
       UPDATE control_calidad
@@ -317,13 +330,28 @@ export const putControl_Calidad = async (req, res) => {
       WHERE c_calidad_id=?
     `;
 
-    await conmysql.query(sql, [...valores, id]);
+    const [result] = await conmysql.query(sql, [...valores, id]);
 
-    const [registroActualizado] = await conmysql.query(
-      `SELECT * FROM control_calidad WHERE c_calidad_id=?`, [id]
-    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Registro no encontrado" });
+    }
 
-    res.json(registroActualizado[0]);
+    // --- 3. Traer registro actualizado con joins ---
+    const [registroActualizado] = await conmysql.query(`
+      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
+      FROM control_calidad cc
+      LEFT JOIN lote l ON cc.lote_id = l.lote_id
+      LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
+      LEFT JOIN usuario u ON cc.usuario_id = u.usuario_id
+      WHERE cc.c_calidad_id = ?
+    `, [id]);
+
+    // --- 4. Emitir evento socket ---
+    if (global._io) {
+      global._io.emit("control_calidad_actualizado", registroActualizado[0]);
+    }
+
+    res.status(200).json(registroActualizado[0]);
 
   } catch (error) {
     console.error("Error en putControl_Calidad:", error);
