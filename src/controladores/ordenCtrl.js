@@ -56,7 +56,7 @@ export const getOrdenesPendientes = async (req, res) => {
       WHERE o.talla_id = ? AND o.orden_estado = 'pendiente'
       GROUP BY o.orden_id
       HAVING orden_libras_pendientes > 0
-      ORDER BY o.orden_fecha_produccion ASC  // Antigua primero
+      ORDER BY o.orden_fecha_produccion ASC  -- Antigua primero
     `, [talla_id]);
 
     res.json(result); // Si vacío, devuelve [] sin error
