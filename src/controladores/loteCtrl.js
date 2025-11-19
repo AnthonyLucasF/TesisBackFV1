@@ -21,16 +21,12 @@ export const getLotexid = async (req, res) => {
         p.proveedor_nombre as lote_proveedor_nombre,
         u.usuario_nombre as lote_usuario_nombre
 
-        c.chofer_nombre, v.vehiculo_placa
       FROM lote l
       LEFT JOIN tipo t ON l.tipo_id = t.tipo_id
       LEFT JOIN vehiculo v ON l.vehiculo_id = v.vehiculo_id
       LEFT JOIN chofer ch ON l.chofer_id = ch.chofer_id
       LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
       LEFT JOIN usuario u ON l.usuario_id = u.usuario_id
-
-      LEFT JOIN chofer c ON l.chofer_id = c.chofer_id
-      LEFT JOIN vehiculo v ON c.vehiculo_id = v.vehiculo_id
 
       WHERE l.lote_id = ?
     `, [req.params.id]);
