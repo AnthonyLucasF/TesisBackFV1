@@ -53,7 +53,7 @@ export const postDefectos = async (req, res) => {
 
     const nuevoId = insert.insertId;
     const anio = new Date().getFullYear();
-    const codigo = `Df-${String(nuevoId).padStart(3, '0')}-${anio}`;
+    const codigo = `Df-${String(nuevoId).padStart(4, '0')}-${anio}`;
 
     await conmysql.query(
       `UPDATE defectos SET defectos_codigo=? WHERE defectos_id=?`,
