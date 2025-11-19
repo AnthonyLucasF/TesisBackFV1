@@ -52,7 +52,7 @@ export const getControl_Calidadxid = async (req, res) => {
 };
 
 // POST: Insertar nuevo registro (sin cambios, ya bien)
-/* export const postControl_Calidad = async (req, res) => {
+export const postControl_Calidad = async (req, res) => {
   try {
     const {
       usuario_id, lote_id, tipo_id, clase_id,
@@ -102,9 +102,9 @@ export const getControl_Calidadxid = async (req, res) => {
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
-}; */
+};
 
-export const postControl_Calidad = async (req, res) => {
+/* export const postControl_Calidad = async (req, res) => {
   try {
     const data = req.body;
 
@@ -146,7 +146,7 @@ export const postControl_Calidad = async (req, res) => {
     console.error('Error POST control_calidad:', error);
     res.status(500).json({ message: error.message });
   }
-};
+}; */
 
 // PUT: Actualizar completo (sin cambios)
 export const putControl_Calidad = async (req, res) => {
