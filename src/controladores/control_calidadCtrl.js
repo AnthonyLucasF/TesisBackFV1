@@ -190,31 +190,30 @@ export const deleteControl_Calidad = async (req, res) => {
  */
 
 
-
 import { conmysql } from "../db.js";
 
-// GET: Todos con JOINs para lote y proveedor, orden descendente por fecha/hora
+// GET: todos
 export const getControl_Calidad = async (req, res) => {
   try {
-    const [result] = await conmysql.query(`
-      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre AS lote_proveedor_nombre, u.usuario_nombre
+    const [rows] = await conmysql.query(`
+      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
       FROM control_calidad cc
       LEFT JOIN lote l ON cc.lote_id = l.lote_id
       LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
       LEFT JOIN usuario u ON cc.usuario_id = u.usuario_id
       ORDER BY l.lote_fecha_ingreso DESC, cc.c_calidad_hora_control DESC
     `);
-    res.json(result);
+    res.json(rows);
   } catch (error) {
-    res.status(500).json({ message: "Error al consultar Control de Calidad" });
+    return res.status(500).json({ message: "Error al consultar Control de Calidad" });
   }
 };
 
-// GET por ID con JOINs
+// GET por ID
 export const getControl_Calidadxid = async (req, res) => {
   try {
-    const [result] = await conmysql.query(`
-      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre AS lote_proveedor_nombre, u.usuario_nombre
+    const [rows] = await conmysql.query(`
+      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
       FROM control_calidad cc
       LEFT JOIN lote l ON cc.lote_id = l.lote_id
       LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
@@ -222,31 +221,28 @@ export const getControl_Calidadxid = async (req, res) => {
       WHERE cc.c_calidad_id = ?
     `, [req.params.id]);
 
-    if (result.length === 0) return res.status(404).json({ c_calidad_id: 0, message: "Control de Calidad no encontrado" });
-    res.json(result[0]);
+    if (rows.length === 0) return res.status(404).json({ c_calidad_id: 0, message: "Control de Calidad no encontrado" });
+    res.json(rows[0]);
   } catch (error) {
-    res.status(500).json({ message: "Error del Servidor" });
+    return res.status(500).json({ message: "Error del Servidor" });
   }
 };
 
-// POST: Crear nuevo registro con código automático
+// POST: crear nuevo registro con código automático
 export const postControl_Calidad = async (req, res) => {
   try {
     const data = req.body;
 
     // Campos obligatorios
-    const requiredFields = ['usuario_id', 'lote_id', 'tipo_id', 'clase_id'];
-    for (const field of requiredFields) {
-      if (!data[field]) return res.status(400).json({ message: `Falta el campo obligatorio: ${field}` });
-    }
+    const required = ['usuario_id', 'lote_id', 'tipo_id', 'clase_id'];
+    for (const f of required) if (!data[f]) return res.status(400).json({ message: `Falta el campo obligatorio: ${f}` });
 
-    // Insert dinámico
     const campos = Object.keys(data);
     const valores = Object.values(data);
-    const signos = valores.map(() => '?').join(',');
+    const placeholders = valores.map(() => '?').join(',');
 
     const [insert] = await conmysql.query(
-      `INSERT INTO control_calidad (${campos.join(',')}) VALUES (${signos})`,
+      `INSERT INTO control_calidad (${campos.join(',')}) VALUES (${placeholders})`,
       valores
     );
 
@@ -257,7 +253,7 @@ export const postControl_Calidad = async (req, res) => {
     await conmysql.query(`UPDATE control_calidad SET c_calidad_codigo=? WHERE c_calidad_id=?`, [codigo, nuevoId]);
 
     const [nuevoRegistro] = await conmysql.query(`
-      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre AS lote_proveedor_nombre, u.usuario_nombre
+      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
       FROM control_calidad cc
       LEFT JOIN lote l ON cc.lote_id = l.lote_id
       LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
@@ -268,11 +264,11 @@ export const postControl_Calidad = async (req, res) => {
     global._io.emit("control_calidad_nuevo", nuevoRegistro[0]);
     res.json(nuevoRegistro[0]);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
-// PUT: Actualización completa
+// PUT: actualización completa
 export const putControl_Calidad = async (req, res) => {
   try {
     const { id } = req.params;
@@ -280,18 +276,14 @@ export const putControl_Calidad = async (req, res) => {
 
     const campos = Object.keys(data);
     const valores = Object.values(data);
+    const setClause = campos.map(c => `${c}=?`).join(',');
 
-    const setClause = campos.map(c => `${c} = ?`).join(', ');
-
-    const [result] = await conmysql.query(
-      `UPDATE control_calidad SET ${setClause} WHERE c_calidad_id = ?`,
-      [...valores, id]
-    );
+    const [result] = await conmysql.query(`UPDATE control_calidad SET ${setClause} WHERE c_calidad_id=?`, [...valores, id]);
 
     if (result.affectedRows === 0) return res.status(404).json({ message: "Control de Calidad no encontrado" });
 
     const [rows] = await conmysql.query(`
-      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre AS lote_proveedor_nombre, u.usuario_nombre
+      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
       FROM control_calidad cc
       LEFT JOIN lote l ON cc.lote_id = l.lote_id
       LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
@@ -302,11 +294,11 @@ export const putControl_Calidad = async (req, res) => {
     global._io.emit("control_calidad_actualizado", rows[0]);
     res.json(rows[0]);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
-// PATCH: Actualización parcial
+// PATCH: actualización parcial
 export const pathControl_Calidad = async (req, res) => {
   try {
     const { id } = req.params;
@@ -314,25 +306,21 @@ export const pathControl_Calidad = async (req, res) => {
 
     if (Object.keys(data).length === 0) return res.status(400).json({ message: "No se enviaron campos para actualizar" });
 
-    const protectedFields = ['c_calidad_id', 'c_calidad_codigo'];
+    const protectedFields = ['c_calidad_id','c_calidad_codigo'];
     protectedFields.forEach(f => delete data[f]);
 
     const campos = Object.keys(data);
     const valores = Object.values(data);
-
     if (campos.length === 0) return res.status(400).json({ message: "No se enviaron campos válidos para actualizar" });
 
-    const setClause = campos.map(c => `${c} = ?`).join(', ');
+    const setClause = campos.map(c => `${c}=?`).join(',');
 
-    const [result] = await conmysql.query(
-      `UPDATE control_calidad SET ${setClause} WHERE c_calidad_id = ?`,
-      [...valores, id]
-    );
+    const [result] = await conmysql.query(`UPDATE control_calidad SET ${setClause} WHERE c_calidad_id=?`, [...valores, id]);
 
     if (result.affectedRows === 0) return res.status(404).json({ message: "Control de Calidad no encontrado" });
 
     const [rows] = await conmysql.query(`
-      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre AS lote_proveedor_nombre, u.usuario_nombre
+      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
       FROM control_calidad cc
       LEFT JOIN lote l ON cc.lote_id = l.lote_id
       LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
@@ -343,7 +331,7 @@ export const pathControl_Calidad = async (req, res) => {
     global._io.emit("control_calidad_actualizado", rows[0]);
     res.json(rows[0]);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -351,14 +339,13 @@ export const pathControl_Calidad = async (req, res) => {
 export const deleteControl_Calidad = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const [result] = await conmysql.query(`DELETE FROM control_calidad WHERE c_calidad_id = ?`, [id]);
+    const [result] = await conmysql.query(`DELETE FROM control_calidad WHERE c_calidad_id=?`, [id]);
 
     if (result.affectedRows === 0) return res.status(404).json({ message: "Control de Calidad no encontrado" });
 
     global._io.emit("control_calidad_eliminado", { c_calidad_id: parseInt(id, 10) });
     res.status(202).json({ message: "Control de Calidad eliminado con éxito" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
