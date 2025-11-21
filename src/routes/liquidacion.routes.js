@@ -1,6 +1,6 @@
 // src/routes/liquidacion.routes.js
 import { Router } from "express";
-import { getLiquidacion, getLiquidacionxid, postLiquidacion, putLiquidacion, pathLiquidacion, deleteLiquidacion } from '../controladores/liquidacionCtrl.js'
+import { getLiquidacion, getLiquidacionxid, postLiquidacion, putLiquidacion, patchLiquidacion, deleteLiquidacion } from '../controladores/liquidacionCtrl.js'
 
 const router = Router()
 
@@ -9,7 +9,7 @@ router.get('/liquidacion', getLiquidacion) // ?tipo=entero or cola
 router.get('/liquidacion/:id', getLiquidacionxid)
 router.post('/liquidacion', postLiquidacion)
 router.put('/liquidacion/:id', putLiquidacion)
-router.patch('/liquidacion/:id', pathLiquidacion)
+router.patch('/liquidacion/:id', patchLiquidacion)
 router.delete('/liquidacion/:id', deleteLiquidacion)
 
 export default router
