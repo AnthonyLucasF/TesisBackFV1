@@ -47,7 +47,7 @@ export const getIngresoTunelxid = async (req, res) => {
 };
 
 // GET rendimiento por lote_id (total_procesado, rendimiento)
-export const getRendimientoLote = async (req, res) => {
+/* export const getRendimientoLote = async (req, res) => {
     try {
         const { lote_id } = req.params;
         const [result] = await conmysql.query(`
@@ -66,7 +66,30 @@ export const getRendimientoLote = async (req, res) => {
     } catch (error) {
         return res.status(500).json({ message: error.message });
     }
+}; */
+
+export const getRendimientoLote = async (req, res) => {
+    try {
+        const { lote_id } = req.params;
+        const [result] = await conmysql.query(`
+      SELECT 
+        SUM(ingresotunel_total) as total_procesado,
+        IF(l.lote_peso_promedio > 0, (SUM(ingresotunel_total) / l.lote_peso_promedio * 100), 0) as rendimiento
+      FROM ingresotunel i
+      LEFT JOIN lote l ON i.lote_id = l.lote_id
+      WHERE i.lote_id = ?
+      GROUP BY i.lote_id
+    `, [lote_id]);
+        if (result.length <= 0 || !result[0].total_procesado) {
+            return res.json({ total_procesado: 0, rendimiento: 0 });
+        }
+        res.json(result[0]);
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
 };
+
+// Breve explicación: Agregado IF para manejar lote_peso_promedio =0, evita NaN/rendimiento erróneo (e.g., 1.829827%).
 
 // POST: Crear nuevo ingreso, validar campos, actualizar orden pendientes, emitir WS
 export const postIngresoTunel = async (req, res) => {
