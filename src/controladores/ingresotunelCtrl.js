@@ -47,27 +47,6 @@ export const getIngresoTunelxid = async (req, res) => {
 };
 
 // GET rendimiento por lote_id (total_procesado, rendimiento)
-/* export const getRendimientoLote = async (req, res) => {
-    try {
-        const { lote_id } = req.params;
-        const [result] = await conmysql.query(`
-            SELECT 
-                SUM(ingresotunel_total) as total_procesado,
-                (SUM(ingresotunel_total) / l.lote_peso_promedio * 100) as rendimiento
-            FROM ingresotunel i
-            LEFT JOIN lote l ON i.lote_id = l.lote_id
-            WHERE i.lote_id = ?
-            GROUP BY i.lote_id
-        `, [lote_id]);
-        if (result.length <= 0 || !result[0].total_procesado) {
-            return res.json({ total_procesado: 0, rendimiento: 0 });
-        }
-        res.json(result[0]);
-    } catch (error) {
-        return res.status(500).json({ message: error.message });
-    }
-}; */
-
 export const getRendimientoLote = async (req, res) => {
     try {
         const { lote_id } = req.params;
@@ -89,28 +68,33 @@ export const getRendimientoLote = async (req, res) => {
     }
 };
 
-// Breve explicación: Agregado IF para manejar lote_peso_promedio =0, evita NaN/rendimiento erróneo (e.g., 1.829827%).
-
 // POST: Crear nuevo ingreso, validar campos, actualizar orden pendientes, emitir WS
 export const postIngresoTunel = async (req, res) => {
     try {
         const {
-            lote_id, orden_id, tipo_id, talla_id, peso_id,
-            ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_total,
-            ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento
+            lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id, peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id, c_calidad_id, defectos_id, ingresotunel_fecha, ingresotunel_peso_neto, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento, ingresotunel_observaciones
         } = req.body;
 
-        // Validaciones básicas
-        if (!lote_id || !tipo_id || !talla_id || !ingresotunel_n_cajas) {
-            return res.status(400).json({ message: "Campos obligatorios faltantes: lote, tipo, talla, n_cajas" });
+        // Validaciones (fix NULL)
+        if (!lote_id || !tipo_id || !talla_id || !ingresotunel_n_cajas || !usuario_id || !maquina_id || !grupo_id || !coche_id) {
+            return res.status(400).json({ message: "Campos obligatorios faltantes" });
         }
-        if (ingresotunel_n_cajas > 330) { // Max coche futuro; por ahora soft check
-            return res.status(400).json({ message: "Número de cajas excede máximo por coche (330)" });
-        }
+        // Defaults for optional
+        const proveedor = proveedor_id || 0;
+        const clase = clase_id || 0;
+        const color = color_id || 0;
+        const corte = corte_id || 0;
+        const glaseo = glaseo_id || 0;
+        const presentacion = presentacion_id || 0;
+        const calidad = c_calidad_id || 0;
+        const defectos = defectos_id || 0;
+        const fecha = ingresotunel_fecha || new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const subtotales = ingresotunel_subtotales || 0;
+        const observaciones = ingresotunel_observaciones || 'Todo Perfecto :D';
 
         const [rows] = await conmysql.query(
-            'INSERT INTO ingresotunel (lote_id, orden_id, tipo_id, talla_id, peso_id, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [lote_id, orden_id, tipo_id, talla_id, peso_id, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento]
+            'INSERT INTO ingresotunel (lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id, peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id, c_calidad_id, defectos_id, ingresotunel_fecha, ingresotunel_peso_neto, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento, ingresotunel_observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [lote_id, usuario_id, proveedor, tipo_id, clase, color, corte, talla_id, peso_id, glaseo, presentacion, orden_id, maquina_id, grupo_id, coche_id, calidad, defectos, fecha, ingresotunel_peso_neto, ingresotunel_n_cajas, ingresotunel_libras_netas, subtotales, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento, observaciones]
         );
 
         const nuevoId = rows.insertId;
@@ -144,9 +128,7 @@ export const putIngresoTunel = async (req, res) => {
     try {
         const { id } = req.params;
         const {
-            lote_id, orden_id, tipo_id, talla_id, peso_id,
-            ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_total,
-            ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento
+            lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id, peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id, c_calidad_id, defectos_id, ingresotunel_fecha, ingresotunel_peso_neto, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento, ingresotunel_observaciones
         } = req.body;
 
         // Fetch anterior para ajustar pendientes
@@ -155,8 +137,8 @@ export const putIngresoTunel = async (req, res) => {
         const anteriorTotal = anterior[0].ingresotunel_total;
 
         const [result] = await conmysql.query(
-            'UPDATE ingresotunel SET lote_id=?, orden_id=?, tipo_id=?, talla_id=?, peso_id=?, ingresotunel_n_cajas=?, ingresotunel_libras_netas=?, ingresotunel_total=?, ingresotunel_sobrante=?, ingresotunel_basura=?, ingresotunel_rendimiento=? WHERE ingresotunel_id=?',
-            [lote_id, orden_id, tipo_id, talla_id, peso_id, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento, id]
+            'UPDATE ingresotunel SET lote_id=?, usuario_id=?, proveedor_id=?, tipo_id=?, clase_id=?, color_id=?, corte_id=?, talla_id=?, peso_id=?, glaseo_id=?, presentacion_id=?, orden_id=?, maquina_id=?, grupo_id=?, coche_id=?, c_calidad_id=?, defectos_id=?, ingresotunel_fecha=?, ingresotunel_peso_neto=?, ingresotunel_n_cajas=?, ingresotunel_libras_netas=?, ingresotunel_subtotales=?, ingresotunel_total=?, ingresotunel_sobrante=?, ingresotunel_basura=?, ingresotunel_rendimiento=?, ingresotunel_observaciones=? WHERE ingresotunel_id=?',
+            [lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id, peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id, c_calidad_id, defectos_id, ingresotunel_fecha, ingresotunel_peso_neto, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento, ingresotunel_observaciones, id]
         );
 
         if (result.affectedRows <= 0) return res.status(404).json({ message: "Ingreso no encontrado" });
