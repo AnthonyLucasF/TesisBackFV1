@@ -133,7 +133,7 @@ export const postIngresoTunel = async (req, res) => {
             return isNaN(num) ? 0 : num;
         };
 
-        // === BUSCAR ÚLTIMO CONTROL DE CALIDAD DEL LOTE (CORREGIDO) ===
+        // === OBTENER ÚLTIMO CONTROL DE CALIDAD DEL LOTE (CORREGIDO) ===
         let c_calidad_id = null;
         let defectos_id = null;
 
