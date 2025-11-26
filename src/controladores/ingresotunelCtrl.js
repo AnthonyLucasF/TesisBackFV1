@@ -127,32 +127,33 @@ export const postIngresoTunel = async (req, res) => {
     try {
         const body = req.body;
 
+        // === LIMPIEZA DE NÚMEROS ===
         const cleanNumber = (val) => {
             if (val === null || val === undefined || val === '') return 0;
             const num = parseFloat(String(val).replace(/[^\d.,-]/g, '').replace(',', '.'));
             return isNaN(num) ? 0 : num;
         };
 
-        // === OBTENER ÚLTIMO CONTROL DE CALIDAD DEL LOTE (CORREGIDO) ===
+        // === BUSCAR ÚLTIMO CONTROL DE CALIDAD DEL LOTE ===
         let c_calidad_id = null;
         let defectos_id = null;
 
         if (body.lote_id) {
-            const [calidadResult] = await conmysql.query(
+            const [calidad] = await conmysql.query(
                 `SELECT c_calidad_id, defectos_id 
                  FROM control_calidad 
                  WHERE lote_id = ? 
-                 ORDER BY c_calidad_fecha DESC 
+                 ORDER BY c_calidad_id DESC 
                  LIMIT 1`,
                 [body.lote_id]
             );
-
-            if (calidadResult.length > 0) {
-                c_calidad_id = calidadResult[0].c_calidad_id;
-                defectos_id = calidadResult[0].defectos_id;
+            if (calidad.length > 0) {
+                c_calidad_id = calidad[0].c_calidad_id;
+                defectos_id = calidad[0].defectos_id;
             }
         }
 
+        // === DATOS FINALES CON DEFAULTS ===
         const data = {
             lote_id: body.lote_id,
             usuario_id: body.usuario_id || 1,
@@ -183,11 +184,12 @@ export const postIngresoTunel = async (req, res) => {
             ingresotunel_observaciones: body.ingresotunel_observaciones || 'Todo Perfecto :D'
         };
 
-        // Validaciones obligatorias
+        // === VALIDACIÓN OBLIGATORIA ===
         if (!data.lote_id || !data.tipo_id || !data.talla_id || !data.coche_id || data.ingresotunel_n_cajas <= 0) {
-            return res.status(400).json({ message: "Faltan campos obligatorios: lote, tipo, talla, coche o cajas" });
+            return res.status(400).json({ message: "Faltan campos obligatorios" });
         }
 
+        // === INSERT ===
         const [rows] = await conmysql.query(`
             INSERT INTO ingresotunel (
                 lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id,
@@ -209,7 +211,7 @@ export const postIngresoTunel = async (req, res) => {
 
         const nuevoId = rows.insertId;
 
-        // Actualizar orden si aplica
+        // === ACTUALIZAR ORDEN ===
         if (data.orden_id > 0 && data.ingresotunel_total > 0) {
             await conmysql.query(
                 `UPDATE orden SET orden_libras_pendientes = GREATEST(0, orden_libras_pendientes - ?) 
@@ -226,7 +228,7 @@ export const postIngresoTunel = async (req, res) => {
         console.error("ERROR POST INGRESO:", error);
         res.status(500).json({
             message: "Error al registrar ingreso",
-            error: error.message
+            sqlError: error.message
         });
     }
 };
