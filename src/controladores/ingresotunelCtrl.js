@@ -135,18 +135,16 @@ export const postIngresoTunel = async (req, res) => {
             ingresotunel_rendimiento = 0, ingresotunel_observaciones = 'Todo Perfecto :D'
         } = req.body;
 
-        // === VALIDACIONES OBLIGATORIAS ===
+        // VALIDACIONES OBLIGATORIAS
         if (!lote_id || !tipo_id || !talla_id || !ingresotunel_n_cajas || !coche_id) {
-            return res.status(400).json({ message: "Faltan campos obligatorios: lote, tipo, talla, cajas o coche" });
+            return res.status(400).json({ message: "Faltan campos obligatorios" });
         }
 
-        // === ASIGNAR USUARIO LOGUEADO SI NO VIENE ===
-        const usuarioFinal = usuario_id || 1; // Cambia por req.user?.id si usas auth
+        // USUARIO LOGUEADO OBLIGATORIO (nunca null)
+        const usuarioFinal = usuario_id && usuario_id > 0 ? usuario_id : 1;
 
-        // === FECHA POR DEFECTO ===
         const fechaFinal = ingresotunel_fecha || new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-        // === INSERT SEGURO ===
         const [rows] = await conmysql.query(`
             INSERT INTO ingresotunel (
                 lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id,
@@ -167,7 +165,6 @@ export const postIngresoTunel = async (req, res) => {
 
         const nuevoId = rows.insertId;
 
-        // === ACTUALIZAR ORDEN SI APLICA ===
         if (orden_id > 0 && ingresotunel_total > 0) {
             await conmysql.query(
                 `UPDATE orden SET orden_libras_pendientes = orden_libras_pendientes - ? 
@@ -181,8 +178,11 @@ export const postIngresoTunel = async (req, res) => {
         res.json({ id: nuevoId, message: "Ingreso registrado con éxito" });
 
     } catch (error) {
-        console.error("Error POST ingreso:", error);
-        res.status(500).json({ message: "Error interno al registrar ingreso" });
+        console.error("ERROR POST INGRESO:", error);
+        res.status(500).json({ 
+            message: "Error al registrar ingreso", 
+            error: error.message 
+        });
     }
 };
 
