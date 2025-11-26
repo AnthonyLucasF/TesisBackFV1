@@ -69,7 +69,7 @@ export const getRendimientoLote = async (req, res) => {
 };
 
 // POST: Crear nuevo ingreso, validar campos, actualizar orden pendientes, emitir WS
-export const postIngresoTunel = async (req, res) => {
+/* export const postIngresoTunel = async (req, res) => {
     try {
         const {
             lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id, peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id, c_calidad_id, defectos_id, ingresotunel_fecha, ingresotunel_peso_neto, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento, ingresotunel_observaciones
@@ -120,6 +120,69 @@ export const postIngresoTunel = async (req, res) => {
         res.json({ id: nuevoId, message: "Ingreso registrado con éxito" });
     } catch (error) {
         return res.status(500).json({ message: error.message });
+    }
+}; */
+
+export const postIngresoTunel = async (req, res) => {
+    try {
+        const {
+            lote_id, usuario_id = null, proveedor_id = 0, tipo_id, clase_id = 0, color_id = 0,
+            corte_id = 0, talla_id, peso_id, glaseo_id = 0, presentacion_id = 0,
+            orden_id = 0, maquina_id = 0, grupo_id = 0, coche_id, c_calidad_id = 0,
+            defectos_id = 0, ingresotunel_fecha, ingresotunel_peso_neto = 0,
+            ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales = 0,
+            ingresotunel_total = 0, ingresotunel_sobrante = 0, ingresotunel_basura = 0,
+            ingresotunel_rendimiento = 0, ingresotunel_observaciones = 'Todo Perfecto :D'
+        } = req.body;
+
+        // === VALIDACIONES OBLIGATORIAS ===
+        if (!lote_id || !tipo_id || !talla_id || !ingresotunel_n_cajas || !coche_id) {
+            return res.status(400).json({ message: "Faltan campos obligatorios: lote, tipo, talla, cajas o coche" });
+        }
+
+        // === ASIGNAR USUARIO LOGUEADO SI NO VIENE ===
+        const usuarioFinal = usuario_id || 1; // Cambia por req.user?.id si usas auth
+
+        // === FECHA POR DEFECTO ===
+        const fechaFinal = ingresotunel_fecha || new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+        // === INSERT SEGURO ===
+        const [rows] = await conmysql.query(`
+            INSERT INTO ingresotunel (
+                lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id,
+                peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id,
+                c_calidad_id, defectos_id, ingresotunel_fecha, ingresotunel_peso_neto,
+                ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales,
+                ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura,
+                ingresotunel_rendimiento, ingresotunel_observaciones
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            lote_id, usuarioFinal, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id,
+            peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id,
+            c_calidad_id, defectos_id, fechaFinal, ingresotunel_peso_neto,
+            ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales,
+            ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura,
+            ingresotunel_rendimiento, ingresotunel_observaciones
+        ]);
+
+        const nuevoId = rows.insertId;
+
+        // === ACTUALIZAR ORDEN SI APLICA ===
+        if (orden_id > 0 && ingresotunel_total > 0) {
+            await conmysql.query(
+                `UPDATE orden SET orden_libras_pendientes = orden_libras_pendientes - ? 
+                 WHERE orden_id = ? AND orden_libras_pendientes >= ?`,
+                [ingresotunel_total, orden_id, ingresotunel_total]
+            );
+            global._io?.emit("orden_actualizada", { orden_id });
+        }
+
+        global._io?.emit("ingreso_tunel_nuevo", { ingresotunel_id: nuevoId });
+        res.json({ id: nuevoId, message: "Ingreso registrado con éxito" });
+
+    } catch (error) {
+        console.error("Error POST ingreso:", error);
+        res.status(500).json({ message: "Error interno al registrar ingreso" });
     }
 };
 
