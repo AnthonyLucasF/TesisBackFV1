@@ -125,25 +125,49 @@ export const getRendimientoLote = async (req, res) => {
 
 export const postIngresoTunel = async (req, res) => {
     try {
-        const {
-            lote_id, usuario_id = null, proveedor_id = 0, tipo_id, clase_id = 0, color_id = 0,
-            corte_id = 0, talla_id, peso_id, glaseo_id = 0, presentacion_id = 0,
-            orden_id = 0, maquina_id = 0, grupo_id = 0, coche_id, c_calidad_id = 0,
-            defectos_id = 0, ingresotunel_fecha, ingresotunel_peso_neto = 0,
-            ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales = 0,
-            ingresotunel_total = 0, ingresotunel_sobrante = 0, ingresotunel_basura = 0,
-            ingresotunel_rendimiento = 0, ingresotunel_observaciones = 'Todo Perfecto :D'
-        } = req.body;
+        const body = req.body;
 
-        // VALIDACIONES OBLIGATORIAS
-        if (!lote_id || !tipo_id || !talla_id || !ingresotunel_n_cajas || !coche_id) {
+        // LIMPIAR Y CONVERTIR A NÚMERO los campos críticos
+        const cleanNumber = (val) => {
+            if (val === null || val === undefined) return 0;
+            const num = parseFloat(String(val).replace(/[^\d.,-]/g, '').replace(',', '.'));
+            return isNaN(num) ? 0 : num;
+        };
+
+        const data = {
+            lote_id: body.lote_id,
+            usuario_id: body.usuario_id || 1,
+            proveedor_id: body.proveedor_id || 0,
+            tipo_id: body.tipo_id,
+            clase_id: body.clase_id || 0,
+            color_id: body.color_id || 0,
+            corte_id: body.corte_id || 0,
+            talla_id: body.talla_id,
+            peso_id: body.peso_id,
+            glaseo_id: body.glaseo_id || 0,
+            presentacion_id: body.presentacion_id || 0,
+            orden_id: body.orden_id || 0,
+            maquina_id: body.maquina_id || 0,
+            grupo_id: body.grupo_id || 0,
+            coche_id: body.coche_id,
+            c_calidad_id: 0,
+            defectos_id: 0,
+            ingresotunel_fecha: body.ingresotunel_fecha || new Date().toISOString().slice(0, 19).replace('T', ' '),
+            ingresotunel_peso_neto: cleanNumber(body.ingresotunel_peso_neto),
+            ingresotunel_n_cajas: cleanNumber(body.ingresotunel_n_cajas),
+            ingresotunel_libras_netas: cleanNumber(body.ingresotunel_libras_netas),
+            ingresotunel_subtotales: cleanNumber(body.ingresotunel_subtotales),
+            ingresotunel_total: cleanNumber(body.ingresotunel_total),
+            ingresotunel_sobrante: cleanNumber(body.ingresotunel_sobrante),
+            ingresotunel_basura: cleanNumber(body.ingresotunel_basura),
+            ingresotunel_rendimiento: cleanNumber(body.ingresotunel_rendimiento),
+            ingresotunel_observaciones: body.ingresotunel_observaciones || 'Todo Perfecto :D'
+        };
+
+        // Validación final
+        if (!data.lote_id || !data.tipo_id || !data.talla_id || !data.ingresotunel_n_cajas || !data.coche_id) {
             return res.status(400).json({ message: "Faltan campos obligatorios" });
         }
-
-        // USUARIO LOGUEADO OBLIGATORIO (nunca null)
-        const usuarioFinal = usuario_id && usuario_id > 0 ? usuario_id : 1;
-
-        const fechaFinal = ingresotunel_fecha || new Date().toISOString().slice(0, 19).replace('T', ' ');
 
         const [rows] = await conmysql.query(`
             INSERT INTO ingresotunel (
@@ -153,25 +177,26 @@ export const postIngresoTunel = async (req, res) => {
                 ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales,
                 ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura,
                 ingresotunel_rendimiento, ingresotunel_observaciones
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
-            lote_id, usuarioFinal, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id,
-            peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id,
-            c_calidad_id, defectos_id, fechaFinal, ingresotunel_peso_neto,
-            ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales,
-            ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura,
-            ingresotunel_rendimiento, ingresotunel_observaciones
+            data.lote_id, data.usuario_id, data.proveedor_id, data.tipo_id, data.clase_id,
+            data.color_id, data.corte_id, data.talla_id, data.peso_id, data.glaseo_id,
+            data.presentacion_id, data.orden_id, data.maquina_id, data.grupo_id, data.coche_id,
+            data.c_calidad_id, data.defectos_id, data.ingresotunel_fecha, data.ingresotunel_peso_neto,
+            data.ingresotunel_n_cajas, data.ingresotunel_libras_netas, data.ingresotunel_subtotales,
+            data.ingresotunel_total, data.ingresotunel_sobrante, data.ingresotunel_basura,
+            data.ingresotunel_rendimiento, data.ingresotunel_observaciones
         ]);
 
         const nuevoId = rows.insertId;
 
-        if (orden_id > 0 && ingresotunel_total > 0) {
+        // Actualizar orden si aplica
+        if (data.orden_id > 0 && data.ingresotunel_total > 0) {
             await conmysql.query(
-                `UPDATE orden SET orden_libras_pendientes = orden_libras_pendientes - ? 
-                 WHERE orden_id = ? AND orden_libras_pendientes >= ?`,
-                [ingresotunel_total, orden_id, ingresotunel_total]
+                `UPDATE orden SET orden_libras_pendientes = GREATEST(0, orden_libras_pendientes - ?) 
+                 WHERE orden_id = ?`, [data.ingresotunel_total, data.orden_id]
             );
-            global._io?.emit("orden_actualizada", { orden_id });
+            global._io?.emit("orden_actualizada", { orden_id: data.orden_id });
         }
 
         global._io?.emit("ingreso_tunel_nuevo", { ingresotunel_id: nuevoId });
@@ -179,9 +204,9 @@ export const postIngresoTunel = async (req, res) => {
 
     } catch (error) {
         console.error("ERROR POST INGRESO:", error);
-        res.status(500).json({ 
-            message: "Error al registrar ingreso", 
-            error: error.message 
+        res.status(500).json({
+            message: "Error al registrar ingreso",
+            error: error.message
         });
     }
 };
