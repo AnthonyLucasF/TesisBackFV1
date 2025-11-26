@@ -127,14 +127,13 @@ export const postIngresoTunel = async (req, res) => {
     try {
         const body = req.body;
 
-        // Limpiar números
         const cleanNumber = (val) => {
-            if (val === null || val === undefined) return 0;
+            if (val === null || val === undefined || val === '') return 0;
             const num = parseFloat(String(val).replace(/[^\d.,-]/g, '').replace(',', '.'));
             return isNaN(num) ? 0 : num;
         };
 
-        // === OBTENER PRIMER CONTROL DE CALIDAD DEL LOTE (CORREGIDO) ===
+        // === BUSCAR ÚLTIMO CONTROL DE CALIDAD DEL LOTE (CORREGIDO) ===
         let c_calidad_id = null;
         let defectos_id = null;
 
@@ -143,7 +142,7 @@ export const postIngresoTunel = async (req, res) => {
                 `SELECT c_calidad_id, defectos_id 
                  FROM control_calidad 
                  WHERE lote_id = ? 
-                 ORDER BY control_calidad_fecha DESC 
+                 ORDER BY c_calidad_fecha DESC 
                  LIMIT 1`,
                 [body.lote_id]
             );
@@ -170,8 +169,8 @@ export const postIngresoTunel = async (req, res) => {
             maquina_id: body.maquina_id || 0,
             grupo_id: body.grupo_id || 0,
             coche_id: body.coche_id,
-            c_calidad_id: c_calidad_id,
-            defectos_id: defectos_id,
+            c_calidad_id,
+            defectos_id,
             ingresotunel_fecha: body.ingresotunel_fecha || new Date().toISOString().slice(0, 19).replace('T', ' '),
             ingresotunel_peso_neto: cleanNumber(body.ingresotunel_peso_neto),
             ingresotunel_n_cajas: cleanNumber(body.ingresotunel_n_cajas),
@@ -184,9 +183,9 @@ export const postIngresoTunel = async (req, res) => {
             ingresotunel_observaciones: body.ingresotunel_observaciones || 'Todo Perfecto :D'
         };
 
-        // Validación obligatorios
-        if (!data.lote_id || !data.tipo_id || !data.talla_id || !data.ingresotunel_n_cajas || !data.coche_id) {
-            return res.status(400).json({ message: "Faltan campos obligatorios" });
+        // Validaciones obligatorias
+        if (!data.lote_id || !data.tipo_id || !data.talla_id || !data.coche_id || data.ingresotunel_n_cajas <= 0) {
+            return res.status(400).json({ message: "Faltan campos obligatorios: lote, tipo, talla, coche o cajas" });
         }
 
         const [rows] = await conmysql.query(`
