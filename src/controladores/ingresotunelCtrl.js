@@ -250,7 +250,6 @@ export const deleteIngresoTunel = async (req, res) => {
     }
 }; */
 
-// src/controladores/ingresotunelCtrl.js
 import { conmysql } from "../db.js";
 
 // SELECT: Obtener todos los registros ordenados descendente por fecha
@@ -325,7 +324,6 @@ export const postIngresoTunel = async (req, res) => {
     try {
         const body = req.body;
 
-        // === LIMPIEZA DE NÚMEROS ===
         const cleanNumber = (val) => {
             if (val === null || val === undefined || val === '') return 0;
             const num = parseFloat(String(val).replace(/[^\d.,-]/g, '').replace(',', '.'));
