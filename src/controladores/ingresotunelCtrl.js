@@ -578,7 +578,7 @@ export const getIngresoTunelxid = async (req, res) => {
         cr.corte_descripcion as corte_descripcion,
         pt.presentacion_descripcion as presentacion_descripcion,
         ch.coche_descripcion as coche_descripcion,
-        ch.estado as coche_estado,
+        ch.coche_estado  as coche_estado,
         gl.glaseo_cantidad as glaseo_cantidad,
         (i.ingresotunel_total - i.ingresotunel_sobrante - i.ingresotunel_basura) / l.lote_peso_promedio * 100 as rendimiento_calculado
       FROM ingresotunel i
