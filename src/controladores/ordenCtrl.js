@@ -319,25 +319,32 @@ export const putOrden = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      orden_codigo, orden_descripcion, orden_cliente, orden_lote_cliente,
-      orden_fecha_produccion, orden_fecha_juliana, orden_talla_real,
-      orden_talla_marcada, orden_microlote, orden_total_master,
-      orden_total_libras, talla_id
+      orden_codigo,
+      orden_descripcion,
+      orden_cliente,
+      orden_lote_cliente,
+      orden_fecha_produccion,
+      orden_fecha_juliana,
+      orden_talla_real,
+      orden_talla_marcada,
+      orden_microlote,
+      orden_total_master,
+      orden_total_libras,
+      talla_id
     } = req.body;
 
+    // Validaciones iniciales
     if (orden_total_libras == null || !talla_id) {
       return res.status(400).json({ message: "orden_total_libras y talla_id requeridos" });
     }
 
-    // Convertir a número
     const totalLibras = Number(orden_total_libras);
 
-    // Obtener libras empacadas
+    // Obtener libras ya empacadas
     const [agg] = await conmysql.query(
       "SELECT IFNULL(SUM(ingresotunel_total), 0) AS empacadas FROM ingresotunel WHERE orden_id = ?",
       [id]
     );
-
     const empacadas = Number(agg[0].empacadas);
 
     // No permitir reducir total por debajo de lo empacado
@@ -347,7 +354,7 @@ export const putOrden = async (req, res) => {
       });
     }
 
-    // Calcular pendientes y sobrantes correctamente
+    // Calcular pendientes y sobrantes
     let orden_libras_pendientes = totalLibras - empacadas;
     let orden_libras_sobrantes = 0;
 
@@ -358,21 +365,42 @@ export const putOrden = async (req, res) => {
 
     const orden_estado = orden_libras_pendientes > 0 ? "pendiente" : "cumplida";
 
-    // Actualizar orden
+    // Actualizar orden en la DB
     const [update] = await conmysql.query(
       `UPDATE orden SET
-        orden_codigo=?, orden_descripcion=?, orden_cliente=?, orden_lote_cliente=?,
-        orden_fecha_produccion=?, orden_fecha_juliana=?, orden_talla_real=?, orden_talla_marcada=?,
-        orden_microlote=?, orden_total_master=?, orden_total_libras=?,
-        orden_libras_pendientes=?, orden_libras_sobrantes=?, 
-        orden_estado=?, talla_id=?
-      WHERE orden_id=?`,
+        orden_codigo = ?,
+        orden_descripcion = ?,
+        orden_cliente = ?,
+        orden_lote_cliente = ?,
+        orden_fecha_produccion = ?,
+        orden_fecha_juliana = ?,
+        orden_talla_real = ?,
+        orden_talla_marcada = ?,
+        orden_microlote = ?,
+        orden_total_master = ?,
+        orden_total_libras = ?,
+        orden_libras_pendientes = ?,
+        orden_libras_sobrantes = ?,
+        orden_estado = ?,
+        talla_id = ?
+      WHERE orden_id = ?`,
       [
-        orden_codigo, orden_descripcion, orden_cliente, orden_lote_cliente,
-        orden_fecha_produccion, orden_fecha_juliana, orden_talla_real, orden_talla_marcada,
-        orden_microlote, orden_total_master, totalLibras,
-        orden_libras_pendientes, orden_libras_sobrantes,
-        orden_estado, talla_id, id
+        orden_codigo,
+        orden_descripcion,
+        orden_cliente,
+        orden_lote_cliente,
+        orden_fecha_produccion,
+        orden_fecha_juliana,
+        orden_talla_real,
+        orden_talla_marcada,
+        orden_microlote,
+        orden_total_master,
+        totalLibras,
+        orden_libras_pendientes,
+        orden_libras_sobrantes,
+        orden_estado,
+        talla_id,
+        id
       ]
     );
 
@@ -380,9 +408,10 @@ export const putOrden = async (req, res) => {
       return res.status(404).json({ message: "Orden no encontrada" });
     }
 
+    // Obtener orden actualizada
     const [actualizado] = await conmysql.query("SELECT * FROM orden WHERE orden_id = ?", [id]);
 
-    // Emitir eventos
+    // Emitir eventos via sockets
     global._io.emit("orden_actualizada", actualizado[0]);
     if (orden_estado === "cumplida") global._io.emit("orden_cumplida", actualizado[0]);
 
