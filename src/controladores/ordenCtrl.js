@@ -128,15 +128,6 @@ export const postOrden = async (req, res) => {
 
 // PUT: Actualizar orden con pendientes y sobrantes correctos
 export const putOrden = async (req, res) => {
-  console.log({
-  totalLibras,
-  orden_libras_pendientes,
-  orden_libras_sobrantes,
-  orden_estado,
-  orden_total_master,
-  talla_id
-});
-
   try {
     const { id } = req.params;
     const {
@@ -154,12 +145,21 @@ export const putOrden = async (req, res) => {
       talla_id
     } = req.body;
 
-    // Validaciones iniciales
-    if (orden_total_libras == null || !talla_id) {
-      return res.status(400).json({ message: "orden_total_libras y talla_id requeridos" });
+    // Validaciones básicas
+    const totalMaster = Number(orden_total_master) || 0;
+    const totalLibras = Number(orden_total_libras);
+    const tallaId = Number(talla_id) || 0;
+
+    if (isNaN(totalLibras) || totalLibras <= 0) {
+      return res.status(400).json({ message: "orden_total_libras requerido y mayor a 0" });
+    }
+    if (tallaId <= 0) {
+      return res.status(400).json({ message: "talla_id requerido y mayor a 0" });
     }
 
-    const totalLibras = Number(orden_total_libras);
+    // Manejo seguro de fechas
+    const fechaProduccion = orden_fecha_produccion || null;
+    const fechaJuliana = orden_fecha_juliana || null;
 
     // Obtener libras ya empacadas
     const [agg] = await conmysql.query(
@@ -189,38 +189,38 @@ export const putOrden = async (req, res) => {
     // Actualizar orden en la DB
     const [update] = await conmysql.query(
       `UPDATE orden SET
-        orden_codigo = ?,
-        orden_descripcion = ?,
-        orden_cliente = ?,
-        orden_lote_cliente = ?,
-        orden_fecha_produccion = ?,
-        orden_fecha_juliana = ?,
-        orden_talla_real = ?,
-        orden_talla_marcada = ?,
-        orden_microlote = ?,
-        orden_total_master = ?,
-        orden_total_libras = ?,
-        orden_libras_pendientes = ?,
-        orden_libras_sobrantes = ?,
-        orden_estado = ?,
-        talla_id = ?
-      WHERE orden_id = ?`,
+         orden_codigo = ?,
+         orden_descripcion = ?,
+         orden_cliente = ?,
+         orden_lote_cliente = ?,
+         orden_fecha_produccion = ?,
+         orden_fecha_juliana = ?,
+         orden_talla_real = ?,
+         orden_talla_marcada = ?,
+         orden_microlote = ?,
+         orden_total_master = ?,
+         orden_total_libras = ?,
+         orden_libras_pendientes = ?,
+         orden_libras_sobrantes = ?,
+         orden_estado = ?,
+         talla_id = ?
+       WHERE orden_id = ?`,
       [
-        orden_codigo,
-        orden_descripcion,
-        orden_cliente,
-        orden_lote_cliente,
-        orden_fecha_produccion,
-        orden_fecha_juliana,
-        orden_talla_real,
-        orden_talla_marcada,
-        orden_microlote,
-        orden_total_master,
+        orden_codigo || null,
+        orden_descripcion || null,
+        orden_cliente || null,
+        orden_lote_cliente || null,
+        fechaProduccion,
+        fechaJuliana,
+        orden_talla_real || null,
+        orden_talla_marcada || null,
+        orden_microlote || null,
+        totalMaster,
         totalLibras,
         orden_libras_pendientes,
         orden_libras_sobrantes,
         orden_estado,
-        talla_id,
+        tallaId,
         id
       ]
     );
@@ -239,6 +239,7 @@ export const putOrden = async (req, res) => {
     res.json(actualizado[0]);
 
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
