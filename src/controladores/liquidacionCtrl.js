@@ -298,27 +298,19 @@ export const getLiquidacionxid = async (req, res) => {
   }
 };
 
-// POST: Crear liquidación desde lote_id y tipo
 export const postLiquidacion = async (req, res) => {
   try {
     const { lote_id, tipo } = req.body;
 
-    console.log("POST Liquidación recibido:", req.body);
-
     if (!lote_id || !tipo) {
-      console.log("Falta lote_id o tipo");
       return res.status(400).json({ message: "lote_id y tipo son requeridos" });
     }
 
     let tipoDB;
     if (tipo === 'entero') tipoDB = 'Camarón Entero';
     else if (tipo === 'cola') tipoDB = 'Camarón Cola';
-    else {
-      console.log("Tipo inválido:", tipo);
-      return res.status(400).json({ message: "Tipo inválido" });
-    }
+    else return res.status(400).json({ message: "Tipo inválido" });
 
-    // Totales ingresotunel
     const [ingresos] = await conmysql.query(
       `SELECT 
         SUM(ingresotunel_total) AS total_empacado,
@@ -328,38 +320,32 @@ export const postLiquidacion = async (req, res) => {
        WHERE lote_id = ? AND tipo_id IN (SELECT tipo_id FROM tipo WHERE tipo_descripcion = ?)`,
       [lote_id, tipoDB]
     );
-    console.log("Ingresos obtenidos:", ingresos);
 
     const total_empacado = ingresos[0]?.total_empacado ?? 0;
     const total_basura = ingresos[0]?.total_basura ?? 0;
     const total_sobrante = ingresos[0]?.total_sobrante ?? 0;
 
-    // Lote
     const [lote] = await conmysql.query(
       'SELECT lote_peso_promedio FROM lote WHERE lote_id = ?',
       [lote_id]
     );
-    console.log("Lote obtenido:", lote);
-
     if (!lote[0]) return res.status(404).json({ message: "Lote no encontrado" });
 
-    const promedio = lote[0].lote_peso_promedio || 0;
+    const promedio = lote[0].lote_peso_promedio ?? 0;
 
-    // Rendimiento
     let rendimiento = 0;
     if (promedio > 0) {
       if (tipo === 'entero') rendimiento = ((total_empacado - total_sobrante) / promedio) * 100;
       else rendimiento = (total_empacado / (promedio - total_basura)) * 100;
     }
+    if (isNaN(rendimiento)) rendimiento = 0;
 
-    // Insertar liquidación
     const [rows] = await conmysql.query(
       `INSERT INTO liquidacion 
-        (lote_id, liquidacion_tipo, liquidacion_rendimiento, liquidacion_basura, liquidacion_total_empacado, liquidacion_fecha)
+        (clasificacion_id, liquidacion_tipo, liquidacion_rendimiento, liquidacion_basura, liquidacion_total_empacado, liquidacion_fecha)
        VALUES (?, ?, ?, ?, ?, NOW())`,
       [lote_id, tipo, rendimiento, total_basura, total_empacado]
     );
-    console.log("Insertado liquidación ID:", rows.insertId);
 
     if (global._io) global._io.emit("liquidacion_generada", { liquidacion_id: rows.insertId });
 
@@ -370,7 +356,6 @@ export const postLiquidacion = async (req, res) => {
     res.status(500).json({ message: "Error generando liquidación", error: error.message });
   }
 };
-
 
 // PUT: Update completa
 export const putLiquidacion = async (req, res) => {
