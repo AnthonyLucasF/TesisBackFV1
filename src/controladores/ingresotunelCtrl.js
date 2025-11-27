@@ -563,26 +563,48 @@ export const getIngresoTunelPorLote = async (req, res) => {
 
 // GET por ID with JOINs for descripciones (tipo, talla, peso, etc.)
 export const getIngresoTunelxid = async (req, res) => {
-    try {
-        const [result] = await conmysql.query(`
+  try {
+    const [result] = await conmysql.query(`
       SELECT i.*, 
         l.lote_codigo as lote_codigo,
         t.tipo_descripcion as tipo_descripcion,
         ta.talla_descripcion as talla_descripcion,
         p.peso_descripcion as peso_descripcion,
+        pr.proveedor_nombre as proveedor_nombre,
+        cl.clase_descripcion as clase_descripcion,
+        co.color_descripcion as color_descripcion,
+        u.usuario_nombre as usuario_nombre,
+        g.grupo_nombre as grupo_nombre,
+        cr.corte_descripcion as corte_descripcion,
+        pt.presentacion_descripcion as presentacion_descripcion,
+        ch.coche_descripcion as coche_descripcion,
+        ch.estado as coche_estado,
+        gl.glaseo_cantidad as glaseo_cantidad,
         (i.ingresotunel_total - i.ingresotunel_sobrante - i.ingresotunel_basura) / l.lote_peso_promedio * 100 as rendimiento_calculado
       FROM ingresotunel i
       LEFT JOIN lote l ON i.lote_id = l.lote_id
       LEFT JOIN tipo t ON i.tipo_id = t.tipo_id
       LEFT JOIN talla ta ON i.talla_id = ta.talla_id
       LEFT JOIN peso p ON i.peso_id = p.peso_id
+      LEFT JOIN proveedor pr ON i.proveedor_id = pr.proveedor_id
+      LEFT JOIN clase cl ON i.clase_id = cl.clase_id
+      LEFT JOIN color co ON i.color_id = co.color_id
+      LEFT JOIN usuario u ON i.usuario_id = u.usuario_id
+      LEFT JOIN grupo g ON i.grupo_id = g.grupo_id
+      LEFT JOIN corte cr ON i.corte_id = cr.corte_id
+      LEFT JOIN presentacion pt ON i.presentacion_id = pt.presentacion_id
+      LEFT JOIN coche ch ON i.coche_id = ch.coche_id
+      LEFT JOIN glaseo gl ON i.glaseo_id = gl.glaseo_id
       WHERE i.ingresotunel_id = ?
     `, [req.params.id]);
-        if (result.length <= 0) return res.status(404).json({ ingresotunel_id: 0, message: "Ingreso no encontrado" });
-        res.json(result[0]);
-    } catch (error) {
-        return res.status(500).json({ message: "Error del Servidor" });
-    }
+
+    if (result.length <= 0) 
+      return res.status(404).json({ ingresotunel_id: 0, message: "Ingreso no encontrado" });
+
+    res.json(result[0]);
+  } catch (error) {
+    return res.status(500).json({ message: "Error del Servidor", detalle: error.message });
+  }
 };
 
 // GET rendimiento por lote_id (total_procesado, rendimiento)
