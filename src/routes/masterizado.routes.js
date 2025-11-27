@@ -3,12 +3,12 @@ import { getMasterizado, getMasterizadoxid, postMasterizado, putMasterizado, pat
 
 const router = Router()
 
-//Armar nuestras rutas
-router.get('/masterizado', getMasterizado) //SELECT
-router.get('/masterizado/:id', getMasterizadoxid) //SELECT x ID
-router.post('/masterizado', postMasterizado) //INSERT
-router.put('/masterizado/:id', putMasterizado) //UPDATE
-router.patch('/masterizado/:id', pathMasterizado) //UPDATE
-router.delete('/masterizado/:id', deleteMasterizado) //DELETE
+// Rutas para masterizado
+router.get('/masterizado', getMasterizado)
+router.get('/masterizado/:id', getMasterizadoxid)
+router.post('/masterizado', postMasterizado)
+router.put('/masterizado/:id', putMasterizado)
+router.patch('/masterizado/:id', pathMasterizado)
+router.delete('/masterizado/:id', deleteMasterizado)
 
 export default router
