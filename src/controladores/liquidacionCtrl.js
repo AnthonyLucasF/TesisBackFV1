@@ -298,66 +298,77 @@ export const getLiquidacionxid = async (req, res) => {
   }
 };
 
-// POST: Crear liquidación from lote_id/tipo, auto-calc rendimiento/basura, emitir WS
+// POST: Crear liquidación desde lote_id y tipo
 export const postLiquidacion = async (req, res) => {
-    try {
-        const { lote_id, tipo } = req.body;
-        if (!lote_id || !tipo) return res.status(400).json({ message: "lote_id y tipo requeridos" });
+  try {
+    const { lote_id, tipo } = req.body;
 
-        // Mapear tipo recibido a descripción real en DB
-        let tipoDB;
-        if(tipo === 'entero') tipoDB = 'Camarón Entero';
-        else if(tipo === 'cola') tipoDB = 'Camarón Cola';
-        else return res.status(400).json({ message: "Tipo inválido" });
-
-        // Traer datos de ingresotunel
-        const [ingresos] = await conmysql.query(
-          `SELECT 
-             COALESCE(SUM(ingresotunel_total),0) as total_empacado,
-             COALESCE(SUM(ingresotunel_basura),0) as total_basura,
-             COALESCE(SUM(ingresotunel_sobrante),0) as total_sobrante
-           FROM ingresotunel
-           WHERE lote_id = ?
-             AND tipo_id IN (SELECT tipo_id FROM tipo WHERE tipo_descripcion = ?)`,
-          [lote_id, tipoDB]
-        );
-
-        const total_empacado = ingresos[0].total_empacado;
-        const total_basura = ingresos[0].total_basura;
-        const total_sobrante = ingresos[0].total_sobrante;
-
-        // Traer peso promedio del lote
-        const [lote] = await conmysql.query('SELECT lote_peso_promedio FROM lote WHERE lote_id = ?', [lote_id]);
-        if(!lote[0]) return res.status(404).json({ message: "Lote no encontrado" });
-        const promedio = lote[0].lote_peso_promedio || 0;
-
-        // Calcular rendimiento
-        let rendimiento = 0;
-        if(promedio > 0){
-            if(tipo === 'entero'){
-                rendimiento = ((total_empacado - total_sobrante) / promedio * 100);
-            } else {
-                rendimiento = (total_empacado / (promedio - total_basura) * 100);
-            }
-        }
-
-        // Insertar liquidación
-        const [rows] = await conmysql.query(
-            'INSERT INTO liquidacion (lote_id, liquidacion_tipo, liquidacion_rendimiento, liquidacion_basura, liquidacion_total_empacado, liquidacion_fecha) VALUES (?, ?, ?, ?, ?, NOW())',
-            [lote_id, tipo, rendimiento, total_basura, total_empacado]
-        );
-
-        const nuevoId = rows.insertId;
-        global._io.emit("liquidacion_generada", { liquidacion_id: nuevoId });
-
-        res.json({ id: nuevoId, message: "Liquidación generada con éxito" });
-
-    } catch (error) {
-        console.error("ERROR POST Liquidación:", error);
-        return res.status(500).json({ message: error.message });
+    // Validaciones básicas
+    if (!lote_id || !tipo) {
+      return res.status(400).json({ message: "lote_id y tipo son requeridos" });
     }
-};
 
+    // Mapear tipo a descripción exacta de DB
+    let tipoDB;
+    if (tipo === 'entero') tipoDB = 'Camarón Entero';
+    else if (tipo === 'cola') tipoDB = 'Camarón Cola';
+    else return res.status(400).json({ message: "Tipo inválido" });
+
+    // Obtener totales de ingresotunel
+    const [ingresos] = await conmysql.query(
+      `SELECT 
+        SUM(ingresotunel_total) AS total_empacado,
+        SUM(ingresotunel_basura) AS total_basura,
+        SUM(ingresotunel_sobrante) AS total_sobrante
+       FROM ingresotunel
+       WHERE lote_id = ? AND tipo_id IN (SELECT tipo_id FROM tipo WHERE tipo_descripcion = ?)`,
+      [lote_id, tipoDB]
+    );
+
+    const total_empacado = ingresos[0]?.total_empacado || 0;
+    const total_basura = ingresos[0]?.total_basura || 0;
+    const total_sobrante = ingresos[0]?.total_sobrante || 0;
+
+    // Obtener lote y validar existencia
+    const [lote] = await conmysql.query(
+      'SELECT lote_peso_promedio FROM lote WHERE lote_id = ?',
+      [lote_id]
+    );
+    if (!lote[0]) return res.status(404).json({ message: "Lote no encontrado" });
+
+    const promedio = lote[0].lote_peso_promedio || 0;
+
+    // Calcular rendimiento
+    let rendimiento = 0;
+    if (promedio > 0) {
+      if (tipo === 'entero') {
+        rendimiento = ((total_empacado - total_sobrante) / promedio) * 100;
+      } else {
+        rendimiento = (total_empacado / (promedio - total_basura)) * 100;
+      }
+    }
+
+    // Insertar liquidación
+    const [rows] = await conmysql.query(
+      `INSERT INTO liquidacion 
+        (lote_id, liquidacion_tipo, liquidacion_rendimiento, liquidacion_basura, liquidacion_total_empacado, liquidacion_fecha)
+       VALUES (?, ?, ?, ?, ?, NOW())`,
+      [lote_id, tipo, rendimiento, total_basura, total_empacado]
+    );
+
+    const nuevoId = rows.insertId;
+
+    // Emitir evento WebSocket
+    if (global._io) {
+      global._io.emit("liquidacion_generada", { liquidacion_id: nuevoId });
+    }
+
+    res.json({ id: nuevoId, message: "Liquidación generada con éxito" });
+  } catch (error) {
+    console.error("ERROR POST Liquidación:", error); // Log completo
+    res.status(500).json({ message: "Error generando liquidación", error: error.message });
+  }
+};
 
 // PUT: Update completa
 export const putLiquidacion = async (req, res) => {
