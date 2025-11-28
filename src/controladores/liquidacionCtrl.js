@@ -84,7 +84,7 @@ export const postLiquidacion = async (req, res) => {
       WHERE i.lote_id = ? AND i.tipo_id = ?
     `, [lote_id, tipo_id]);
 
-    if (ingresos.length === 0) {
+    if (!Array.isArray(ingresos) || ingresos.length === 0) {
       return res.status(404).json({ message: "No existen ingresos para liquidar" });
     }
 
@@ -95,11 +95,12 @@ export const postLiquidacion = async (req, res) => {
       WHERE lote_id = ? AND tipo_id = ?
     `, [liquidacion_id, lote_id, tipo_id]);
 
-    // Calcular totales
-    const total_libras = ingresos.reduce((a, b) => a + Number(b.ingresotunel_total), 0);
-    const total_basura = ingresos.reduce((a, b) => a + Number(b.ingresotunel_basura), 0);
+    // Calcular totales de manera segura
+    const total_libras = ingresos.reduce((sum, i) => sum + (Number(i.ingresotunel_total) || 0), 0);
+    const total_basura = ingresos.reduce((sum, i) => sum + (Number(i.ingresotunel_basura) || 0), 0);
     const rendimiento = total_libras > 0 ? ((total_libras - total_basura) / total_libras) * 100 : 0;
 
+    // Guardar totales en la liquidación
     await conmysql.query(`
       UPDATE liquidacion
       SET liquidacion_rendimiento = ?, liquidacion_basura = ?
@@ -113,11 +114,17 @@ export const postLiquidacion = async (req, res) => {
       totales: { total_libras, total_basura, rendimiento },
       ingresos: ingresos.map(i => i.ingresotunel_id)
     });
+
   } catch (error) {
-    console.error("Error en postLiquidacion:", error);
-    return res.status(500).json({ message: "Error interno", error: error.message });
+    console.error("Error en postLiquidacion:", {
+      message: error.message,
+      stack: error.stack,
+      body: req.body
+    });
+    return res.status(500).json({ message: "Error interno en el servidor", error: error.message });
   }
 };
+
 
 // PUT: Update completa
 export const putLiquidacion = async (req, res) => {
