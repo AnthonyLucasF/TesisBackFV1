@@ -1,4 +1,3 @@
-// src/controladores/liquidacionCtrl.js
 import { conmysql } from "../db.js";
 
 // GET: Obtener liquidaciones por tipo (entero/cola), ordenadas DESC
@@ -36,8 +35,8 @@ export const postLiquidacion = async (req, res) => {
     }
 
     let tipoDB;
-    if (tipo === 'entero') tipoDB = 'Camarón Entero';
-    else if (tipo === 'cola') tipoDB = 'Camarón Cola';
+    if (tipo === 'entero') tipoDB = 'entero'; // Fix: Match tipo table descripcion
+    else if (tipo === 'cola') tipoDB = 'cola'; // Fix
     else return res.status(400).json({ message: "Tipo inválido" });
 
     const [ingresos] = await conmysql.query(
