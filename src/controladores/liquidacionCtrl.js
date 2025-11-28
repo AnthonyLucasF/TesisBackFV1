@@ -35,8 +35,8 @@ export const postLiquidacion = async (req, res) => {
     }
 
     let tipoDB;
-    if (tipo === 'entero') tipoDB = 'entero'; // Fix: Match tipo table descripcion
-    else if (tipo === 'cola') tipoDB = 'cola'; // Fix
+    if (tipo === 'entero') tipoDB = 'Entero'; // Fix: Capitalize to match DB tipo_descripcion
+    else if (tipo === 'cola') tipoDB = 'Cola'; // Fix
     else return res.status(400).json({ message: "Tipo inválido" });
 
     const [ingresos] = await conmysql.query(
