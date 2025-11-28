@@ -125,7 +125,6 @@ export const postLiquidacion = async (req, res) => {
   }
 };
 
-
 // PUT: Update completa
 export const putLiquidacion = async (req, res) => {
   try {
