@@ -76,10 +76,12 @@ export const postLiquidacion = async (req, res) => {
 
     const liquidacion_id = result.insertId;
 
-    // Obtener ingresos del lote
+    // Obtener ingresos del lote según tipo_id
     const [ingresos] = await conmysql.query(`
-      SELECT * FROM ingresotunel
-      WHERE lote_id = ? AND tipo_id = ?
+      SELECT i.ingresotunel_id, i.ingresotunel_total, i.ingresotunel_sobrante, i.ingresotunel_basura,
+             i.talla_id, i.orden_id, i.presentacion_id, i.peso_id
+      FROM ingresotunel i
+      WHERE i.lote_id = ? AND i.tipo_id = ?
     `, [lote_id, tipo_id]);
 
     if (ingresos.length === 0) {
@@ -93,7 +95,7 @@ export const postLiquidacion = async (req, res) => {
       WHERE lote_id = ? AND tipo_id = ?
     `, [liquidacion_id, lote_id, tipo_id]);
 
-    // Totales
+    // Calcular totales
     const total_libras = ingresos.reduce((a, b) => a + Number(b.ingresotunel_total), 0);
     const total_basura = ingresos.reduce((a, b) => a + Number(b.ingresotunel_basura), 0);
     const rendimiento = total_libras > 0 ? ((total_libras - total_basura) / total_libras) * 100 : 0;
@@ -104,8 +106,13 @@ export const postLiquidacion = async (req, res) => {
       WHERE liquidacion_id = ?
     `, [rendimiento, total_basura, liquidacion_id]);
 
-    return res.json({ liquidacion_id, totales: { total_libras, total_basura, rendimiento } });
-
+    return res.json({
+      liquidacion_id,
+      lote_id,
+      tipo_id,
+      totales: { total_libras, total_basura, rendimiento },
+      ingresos: ingresos.map(i => i.ingresotunel_id)
+    });
   } catch (error) {
     console.error("Error en postLiquidacion:", error);
     return res.status(500).json({ message: "Error interno", error: error.message });
