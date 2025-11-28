@@ -26,6 +26,17 @@ export const getLiquidacionxid = async (req, res) => {
   }
 };
 
+// GET detalles por liquidacion_id
+export const getLiquidacionDetalle = async (req, res) => {
+  try {
+    const { liquidacion_id } = req.params;
+    const [result] = await conmysql.query('SELECT * FROM liquidacion_detalle WHERE liquidacion_id = ?', [liquidacion_id]);
+    res.json(result);
+  } catch (error) {
+    return res.status(500).json({ message: "Error al consultar detalles" });
+  }
+};
+
 export const postLiquidacion = async (req, res) => {
   try {
     const { lote_id, tipo } = req.body;
@@ -35,8 +46,8 @@ export const postLiquidacion = async (req, res) => {
     }
 
     let tipoDB;
-    if (tipo === 'entero') tipoDB = 'Entero'; // Fix: Capitalize to match DB tipo_descripcion
-    else if (tipo === 'cola') tipoDB = 'Cola'; // Fix
+    if (tipo === 'entero') tipoDB = 'entero'; // Fix: Match tipo table descripcion
+    else if (tipo === 'cola') tipoDB = 'cola'; // Fix
     else return res.status(400).json({ message: "Tipo inválido" });
 
     const [ingresos] = await conmysql.query(
@@ -75,9 +86,32 @@ export const postLiquidacion = async (req, res) => {
       [lote_id, tipo, rendimiento, total_basura, total_empacado]
     );
 
-    if (global._io) global._io.emit("liquidacion_generada", { liquidacion_id: rows.insertId });
+    const liquidacionId = rows.insertId;
 
-    res.json({ id: rows.insertId, message: "Liquidación generada con éxito" });
+    // Insert detalles (group by talla, orden, etc.)
+    const [detalles] = await conmysql.query(
+      `SELECT talla_id, orden_id, presentacion_id, peso_id, 
+              SUM(ingresotunel_total) AS libras, 
+              SUM(ingresotunel_basura) AS basura,
+              (SUM(ingresotunel_total) / ? * 100) AS rendimiento
+       FROM ingresotunel
+       WHERE lote_id = ? AND tipo_id IN (SELECT tipo_id FROM tipo WHERE tipo_descripcion = ?)
+       GROUP BY talla_id, orden_id, presentacion_id, peso_id`,
+      [promedio, lote_id, tipoDB]
+    );
+
+    for (const det of detalles) {
+      await conmysql.query(
+        `INSERT INTO liquidacion_detalle 
+          (liquidacion_id, talla_id, orden_id, presentacion_id, peso_id, libras, rendimiento, basura)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [liquidacionId, det.talla_id, det.orden_id, det.presentacion_id, det.peso_id, det.libras, det.rendimiento, det.basura]
+      );
+    }
+
+    if (global._io) global._io.emit("liquidacion_generada", { liquidacion_id: liquidacionId });
+
+    res.json({ id: liquidacionId, message: "Liquidación generada con éxito" });
 
   } catch (error) {
     console.error("ERROR POST Liquidación:", error);
