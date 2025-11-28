@@ -63,20 +63,21 @@ export const getLiquidacionDetalle = async (req, res) => {
 export const postLiquidacion = async (req, res) => {
   const { lote_id, tipo_id } = req.body;
 
+  // Validación de campos obligatorios
   if (!lote_id || !tipo_id) {
     return res.status(400).json({ message: "lote_id y tipo_id son obligatorios" });
   }
 
   try {
-    // Crear liquidación
+    // 1️⃣ Crear liquidación incluyendo lote_id
     const [result] = await conmysql.query(`
-      INSERT INTO liquidacion (liquidacion_tipo, liquidacion_fecha)
-      VALUES (?, NOW())
-    `, [tipo_id]);
+      INSERT INTO liquidacion (lote_id, liquidacion_tipo, liquidacion_fecha)
+      VALUES (?, ?, NOW())
+    `, [lote_id, tipo_id]);
 
     const liquidacion_id = result.insertId;
 
-    // Obtener ingresos del lote según tipo_id
+    // 2️⃣ Obtener ingresos del lote según tipo_id
     const [ingresos] = await conmysql.query(`
       SELECT i.ingresotunel_id, i.ingresotunel_total, i.ingresotunel_sobrante, i.ingresotunel_basura,
              i.talla_id, i.orden_id, i.presentacion_id, i.peso_id
@@ -84,29 +85,30 @@ export const postLiquidacion = async (req, res) => {
       WHERE i.lote_id = ? AND i.tipo_id = ?
     `, [lote_id, tipo_id]);
 
-    if (!Array.isArray(ingresos) || ingresos.length === 0) {
+    if (!ingresos.length) {
       return res.status(404).json({ message: "No existen ingresos para liquidar" });
     }
 
-    // Asignar liquidación a los ingresos
+    // 3️⃣ Asignar liquidación a los ingresos
     await conmysql.query(`
       UPDATE ingresotunel
       SET liquidacion_id = ?
       WHERE lote_id = ? AND tipo_id = ?
     `, [liquidacion_id, lote_id, tipo_id]);
 
-    // Calcular totales de manera segura
-    const total_libras = ingresos.reduce((sum, i) => sum + (Number(i.ingresotunel_total) || 0), 0);
-    const total_basura = ingresos.reduce((sum, i) => sum + (Number(i.ingresotunel_basura) || 0), 0);
+    // 4️⃣ Calcular totales y rendimiento
+    const total_libras = ingresos.reduce((sum, i) => sum + Number(i.ingresotunel_total || 0), 0);
+    const total_basura = ingresos.reduce((sum, i) => sum + Number(i.ingresotunel_basura || 0), 0);
     const rendimiento = total_libras > 0 ? ((total_libras - total_basura) / total_libras) * 100 : 0;
 
-    // Guardar totales en la liquidación
+    // 5️⃣ Actualizar liquidación con totales
     await conmysql.query(`
       UPDATE liquidacion
       SET liquidacion_rendimiento = ?, liquidacion_basura = ?
       WHERE liquidacion_id = ?
     `, [rendimiento, total_basura, liquidacion_id]);
 
+    // 6️⃣ Retornar respuesta completa
     return res.json({
       liquidacion_id,
       lote_id,
@@ -116,12 +118,8 @@ export const postLiquidacion = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error en postLiquidacion:", {
-      message: error.message,
-      stack: error.stack,
-      body: req.body
-    });
-    return res.status(500).json({ message: "Error interno en el servidor", error: error.message });
+    console.error("Error en postLiquidacion:", error);
+    return res.status(500).json({ message: "Error interno", error: error.message });
   }
 };
 
