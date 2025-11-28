@@ -1,4 +1,3 @@
-// src/routes/liquidacion.routes.js
 import { Router } from "express";
 import { getLiquidacion, getLiquidacionxid, postLiquidacion, putLiquidacion, patchLiquidacion, deleteLiquidacion } from '../controladores/liquidacionCtrl.js'
 
