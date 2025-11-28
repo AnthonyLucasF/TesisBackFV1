@@ -47,35 +47,45 @@ export const getLiquidacionxid = async (req, res) => {
 export const getLiquidacionDetalle = async (req, res) => {
   try {
     const { liquidacion_id } = req.params;
+
     const [detalle] = await conmysql.query(`
-      SELECT i.*, 
-             t.tipo_descripcion, 
-             c.clase_descripcion,
-             co.color_descripcion,
-             ta.talla_descripcion,
-             p.presentacion_descripcion,
-             o.orden_descripcion
+      SELECT 
+        i.talla_id,
+        i.orden_id,
+        i.presentacion_id,
+        ta.talla_descripcion,
+        o.orden_descripcion,
+        p.presentacion_descripcion,
+        SUM(i.ingresotunel_total) AS total_libras,
+        SUM(i.ingresotunel_basura) AS total_basura,
+        SUM(i.ingresotunel_sobrante) AS total_sobrante,
+        CASE 
+          WHEN SUM(i.ingresotunel_total) > 0 
+          THEN ((SUM(i.ingresotunel_total) - SUM(i.ingresotunel_basura)) / SUM(i.ingresotunel_total)) * 100
+          ELSE 0
+        END AS rendimiento
       FROM ingresotunel i
-      LEFT JOIN tipo t ON i.tipo_id = t.tipo_id
-      LEFT JOIN clase c ON i.clase_id = c.clase_id
-      LEFT JOIN color co ON i.color_id = co.color_id
       LEFT JOIN talla ta ON i.talla_id = ta.talla_id
-      LEFT JOIN presentacion p ON i.presentacion_id = p.presentacion_id
       LEFT JOIN orden o ON i.orden_id = o.orden_id
+      LEFT JOIN presentacion p ON i.presentacion_id = p.presentacion_id
       WHERE i.liquidacion_id = ?
+      GROUP BY i.talla_id, i.orden_id, i.presentacion_id, ta.talla_descripcion, o.orden_descripcion, p.presentacion_descripcion
+      ORDER BY ta.talla_descripcion, o.orden_descripcion, p.presentacion_descripcion
     `, [liquidacion_id]);
 
-    // Convertir campos numéricos
-    const formatted = detalle.map(i => ({
-      ...i,
-      ingresotunel_total: Number(i.ingresotunel_total || 0),
-      ingresotunel_basura: Number(i.ingresotunel_basura || 0),
-      ingresotunel_sobrante: Number(i.ingresotunel_sobrante || 0)
+    // Convertir a números
+    const formatted = detalle.map(d => ({
+      ...d,
+      total_libras: Number(d.total_libras || 0),
+      total_basura: Number(d.total_basura || 0),
+      total_sobrante: Number(d.total_sobrante || 0),
+      rendimiento: Number(d.rendimiento || 0)
     }));
 
     res.json(formatted);
+
   } catch (error) {
-    return res.status(500).json({ message: "Error al consultar detalles", error: error.message });
+    return res.status(500).json({ message: "Error al consultar detalles agrupados", error: error.message });
   }
 };
 
