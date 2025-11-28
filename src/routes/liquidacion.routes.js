@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getLiquidacion, getLiquidacionxid, postLiquidacion, putLiquidacion, patchLiquidacion, deleteLiquidacion } from '../controladores/liquidacionCtrl.js'
+import { getLiquidacion, getLiquidacionxid, getLiquidacionDetalle, postLiquidacion, putLiquidacion, patchLiquidacion, deleteLiquidacion } from '../controladores/liquidacionCtrl.js'
 
 const router = Router()
 
