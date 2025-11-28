@@ -6,6 +6,7 @@ const router = Router()
 // Rutas para liquidacion
 router.get('/liquidacion', getLiquidacion) // ?tipo=entero or cola
 router.get('/liquidacion/:id', getLiquidacionxid)
+router.get('/liquidacion/detalle/:liquidacion_id', getLiquidacionDetalle) // New
 router.post('/liquidacion', postLiquidacion)
 router.put('/liquidacion/:id', putLiquidacion)
 router.patch('/liquidacion/:id', patchLiquidacion)
