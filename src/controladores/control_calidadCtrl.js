@@ -39,46 +39,6 @@ export const getControl_Calidadxid = async (req, res) => {
 };
 
 // POST: crear nuevo registro con código automático
-/* export const postControl_Calidad = async (req, res) => {
-  try {
-    const data = req.body;
-
-    // Campos obligatorios
-    const required = ['usuario_id', 'lote_id', 'tipo_id', 'clase_id'];
-    for (const f of required) if (!data[f]) return res.status(400).json({ message: `Falta el campo obligatorio: ${f}` });
-
-    const campos = Object.keys(data);
-    const valores = Object.values(data);
-    const placeholders = valores.map(() => '?').join(',');
-
-    const [insert] = await conmysql.query(
-      `INSERT INTO control_calidad (${campos.join(',')}) VALUES (${placeholders})`,
-      valores
-    );
-
-    const nuevoId = insert.insertId;
-    const anio = new Date().getFullYear();
-    const codigo = `Cc-${String(nuevoId).padStart(4, '0')}-${anio}`;
-
-    await conmysql.query(`UPDATE control_calidad SET c_calidad_codigo=? WHERE c_calidad_id=?`, [codigo, nuevoId]);
-
-    const [nuevoRegistro] = await conmysql.query(`
-      SELECT cc.*, l.lote_codigo, l.lote_libras_remitidas, p.proveedor_nombre, u.usuario_nombre
-      FROM control_calidad cc
-      LEFT JOIN lote l ON cc.lote_id = l.lote_id
-      LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
-      LEFT JOIN usuario u ON cc.usuario_id = u.usuario_id
-      WHERE cc.c_calidad_id = ?
-    `, [nuevoId]);
-
-    global._io.emit("control_calidad_nuevo", nuevoRegistro[0]);
-    res.json(nuevoRegistro[0]);
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-}; */
-
-// POST: crear nuevo registro con código automático
 export const postControl_Calidad = async (req, res) => {
   console.log("POST /control_calidad data:", req.body);
 

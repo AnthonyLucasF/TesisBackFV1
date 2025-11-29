@@ -2,40 +2,7 @@ import { conmysql } from "../db.js";
 import jwt from 'jsonwebtoken';
 import bcryptjs from 'bcryptjs';
 
-/* export const validarsesion = async (req, res) => {
-    try {
-        const { usuario_usuario, usuario_clave } = req.body;
-
-        const [usuarios] = await conmysql.query('SELECT * FROM usuario WHERE usuario_usuario=?', [usuario_usuario]);
-
-        if (usuarios.length === 0) {
-            return res.status(404).json({ message: 'El Usuario no está registrado' });
-        }
-
-        const usuario = usuarios[0];
-
-        if (usuario.usuario_clave !== usuario_clave) {
-            return res.status(401).json({ message: 'Contraseña incorrecta.' });
-        }
-
-        res.status(200).json({
-            message: 'Inicio de sesión exitoso',
-            usuario: {
-                id: usuario.id,
-                email: usuario.usuario_cedula,
-                nombre: usuario.usuario_nombre,
-                avatar: usuario.usuario_usuario,
-                estado: usuario.usuario_clave,
-                estado: usuario.usuario_estado,
-                estado: usuario.usuario_rol
-            }
-        });
-    } catch (error) {
-        console.error('Error en login:', error);
-        res.status(500).json({ message: 'Error en el servidor' });
-    }
-}; */
-
+//
 export const validarsesion = async (req, res) => {
     try {
         const { usuario_usuario, usuario_clave } = req.body;
