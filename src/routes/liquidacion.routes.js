@@ -1,4 +1,4 @@
-import { Router } from "express";
+/* import { Router } from "express";
 import { getLiquidacion, getLiquidacionxid, getLiquidacionDetalle, postLiquidacion, putLiquidacion, patchLiquidacion, deleteLiquidacion } from '../controladores/liquidacionCtrl.js'
 
 const router = Router()
@@ -12,4 +12,21 @@ router.put('/liquidacion/:id', putLiquidacion)
 router.patch('/liquidacion/:id', patchLiquidacion)
 router.delete('/liquidacion/:id', deleteLiquidacion)
 
-export default router
+export default router */
+
+import { Router } from "express";
+import {
+  generarLiquidacion,
+  listarLiquidaciones,
+  obtenerLiquidacionCompleta,
+  eliminarLiquidacion
+} from "../controladores/liquidacionCtrl.js";
+
+const router = Router();
+
+router.post("/", generarLiquidacion);
+router.get("/", listarLiquidaciones);
+router.get("/:id", obtenerLiquidacionCompleta);
+router.delete("/:id", eliminarLiquidacion);
+
+export default router;
