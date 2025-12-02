@@ -223,7 +223,6 @@ export const deleteLiquidacion = async (req, res) => {
  */
 
 
-
 import { conmysql } from "../db.js";
 
 // ------------------------------------------------------------
@@ -237,25 +236,13 @@ export const generarLiquidacion = async (req, res) => {
       return res.status(400).json({ message: "Datos incompletos" });
 
     // ---------------------------------------------
-    // MAPEAR tipo string → tipo_descripcion real BD
+    // MAPEO CORRECTO (SIN USAR TABLA tipo)
     // ---------------------------------------------
-    let tipoBD = "";
-    if (tipo === "entero" || tipo === 1) tipoBD = "Camarón Entero";
-    else if (tipo === "cola" || tipo === 2) tipoBD = "Camarón Cola";
-    else return res.status(400).json({ message: "Tipo no válido" });
-
-    // Obtener tipo_id real
-    const [[tipoRow]] = await conmysql.query(`
-      SELECT tipo_id FROM tipo WHERE tipo_descripcion = ?
-    `, [tipoBD]);
-
-    if (!tipoRow)
-      return res.status(400).json({ message: "Tipo inexistente en BD" });
-
-    const tipo_real_id = tipoRow.tipo_id;
+    const tipo_id_real = (tipo === "entero" || tipo === 1) ? 1 : 2;
+    const tipo_nombre = tipo_id_real === 1 ? "Camarón Entero" : "Camarón Cola";
 
     // ---------------------------------------------
-    // BUSCAR INGRESOS REALES POR TIPO Y LOTE
+    // BUSCAR INGRESOS DEL LOTE
     // ---------------------------------------------
     const [ingresos] = await conmysql.query(`
       SELECT it.*, 
@@ -277,7 +264,7 @@ export const generarLiquidacion = async (req, res) => {
       LEFT JOIN presentacion pr ON it.presentacion_id = pr.presentacion_id
       LEFT JOIN orden o ON it.orden_id = o.orden_id
       WHERE it.lote_id = ? AND it.tipo_id = ?
-    `, [lote_id, tipo_real_id]);
+    `, [lote_id, tipo_id_real]);
 
     if (!ingresos.length)
       return res.status(400).json({ message: "No existen ingresos para este tipo" });
@@ -308,7 +295,7 @@ export const generarLiquidacion = async (req, res) => {
     const [exist] = await conmysql.query(`
       SELECT liquidacion_id FROM liquidacion 
       WHERE lote_id = ? AND liquidacion_tipo = ?
-    `, [lote_id, tipoBD]);
+    `, [lote_id, tipo_nombre]);
 
     if (exist.length) {
       const old = exist[0].liquidacion_id;
@@ -317,10 +304,11 @@ export const generarLiquidacion = async (req, res) => {
     }
 
     // ---------------------------------------------
-    // CALCULOS REALES
+    // CALCULAR
     // ---------------------------------------------
     const totalLibras = ingresos.reduce((s, x) => s + Number(x.ingresotunel_total), 0);
     const totalBasura = ingresos.reduce((s, x) => s + Number(x.ingresotunel_basura ?? 0), 0);
+
     const rendimiento = (totalLibras + totalBasura) > 0
       ? (totalLibras / (totalLibras + totalBasura)) * 100
       : 0;
@@ -332,7 +320,7 @@ export const generarLiquidacion = async (req, res) => {
       INSERT INTO liquidacion 
       (lote_id, liquidacion_tipo, liquidacion_rendimiento, liquidacion_basura)
       VALUES (?, ?, ?, ?)
-    `, [lote_id, tipoBD, rendimiento, totalBasura]);
+    `, [lote_id, tipo_nombre, rendimiento, totalBasura]);
 
     const liquidacion_id = liq.insertId;
 
@@ -388,54 +376,4 @@ export const generarLiquidacion = async (req, res) => {
     console.error(err);
     res.status(500).json({ message: err.message });
   }
-};
-
-// ------------------------------------------------------------
-// 2. LISTAR
-// ------------------------------------------------------------
-export const listarLiquidaciones = async (req, res) => {
-  const { tipo } = req.query;
-
-  const tipoBD = tipo === "entero"
-    ? "Camarón Entero"
-    : tipo === "cola"
-      ? "Camarón Cola"
-      : tipo;
-
-  const [rows] = await conmysql.query(`
-    SELECT * FROM liquidacion
-    WHERE liquidacion_tipo = ?
-    ORDER BY liquidacion_fecha DESC
-  `, [tipoBD]);
-
-  res.json(rows);
-};
-
-// ------------------------------------------------------------
-// 3. OBTENER COMPLETA
-// ------------------------------------------------------------
-export const obtenerLiquidacionCompleta = async (req, res) => {
-  const id = req.params.id;
-
-  const [[cabecera]] = await conmysql.query(`
-    SELECT * FROM liquidacion WHERE liquidacion_id = ?
-  `, [id]);
-
-  const [detalles] = await conmysql.query(`
-    SELECT * FROM liquidacion_detalle WHERE liquidacion_id = ?
-  `, [id]);
-
-  res.json({ cabecera, detalles });
-};
-
-// ------------------------------------------------------------
-// 4. ELIMINAR
-// ------------------------------------------------------------
-export const eliminarLiquidacion = async (req, res) => {
-  const id = req.params.id;
-
-  await conmysql.query("DELETE FROM liquidacion_detalle WHERE liquidacion_id = ?", [id]);
-  await conmysql.query("DELETE FROM liquidacion WHERE liquidacion_id = ?", [id]);
-
-  res.json({ message: "Liquidación eliminada" });
 };
