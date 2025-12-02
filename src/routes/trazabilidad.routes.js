@@ -1,10 +1,22 @@
-// src/routes/trazabilidad.routes.js
+// src/rutas/trazabilidadRutas.js
 import { Router } from "express";
-import { getHistorialLote } from "../controladores/trazabilidadCtrl.js";
+import {
+  getHistorialLote,
+  getHistorialLotePorCodigo
+} from "../controladores/trazabilidadCtrl.js";
 
 const router = Router();
 
-// Obtener toda la trazabilidad del lote
+// Buscar por ID de lote
+// Coincide con: this.http.get(URLAPI + 'trazabilidad/id/' + lote_id)
+router.get("/trazabilidad/id/:lote_id", getHistorialLote);
+
+// (Opcional) soporte extra: /trazabilidad/:lote_id
+// por si haces pruebas directas desde el navegador
 router.get("/trazabilidad/:lote_id", getHistorialLote);
+
+// Buscar por CÓDIGO de lote
+// Coincide con: this.http.get(URLAPI + 'trazabilidad/codigo/' + codigo)
+router.get("/trazabilidad/codigo/:codigo", getHistorialLotePorCodigo);
 
 export default router;
