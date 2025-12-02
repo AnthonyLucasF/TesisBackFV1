@@ -16,16 +16,16 @@ export default router */
 
 import { Router } from "express";
 import {
-    generarLiquidacion,
-    listarLiquidaciones,
-    obtenerLiquidacionCompleta,
-    eliminarLiquidacion
+  generarLiquidacion,
+  listarLiquidaciones,
+  obtenerLiquidacionCompleta,
+  eliminarLiquidacion
 } from "../controladores/liquidacionCtrl.js";
 
 const router = Router();
 
-router.post("/", generarLiquidacion);      // requiere lote_id + tipo_id
-router.get("/", listarLiquidaciones);      // ?tipo_id=1 o 2
+router.post("/", generarLiquidacion);
+router.get("/", listarLiquidaciones);
 router.get("/:id", obtenerLiquidacionCompleta);
 router.delete("/:id", eliminarLiquidacion);
 
