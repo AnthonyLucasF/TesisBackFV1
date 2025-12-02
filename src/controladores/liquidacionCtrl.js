@@ -269,7 +269,7 @@ export const postLiquidacion = async (req, res) => {
              col.color_descripcion,
              co.corte_descripcion,
              p.peso_descripcion,
-             g.glaseo_nombre,
+             g.glaseo_cantidad,
              pr.presentacion_descripcion,
              o.orden_codigo
       FROM ingresotunel it
@@ -342,7 +342,7 @@ export const postLiquidacion = async (req, res) => {
     const detalleMap = {};
 
     ingresos.forEach(i => {
-      const clave = `${i.talla_descripcion}-${i.clase_descripcion}-${i.color_descripcion}-${i.corte_descripcion}-${i.peso_descripcion}-${i.glaseo_nombre}-${i.presentacion_descripcion}-${i.orden_codigo}`;
+      const clave = `${i.talla_descripcion}-${i.clase_descripcion}-${i.color_descripcion}-${i.corte_descripcion}-${i.peso_descripcion}-${i.glaseo_cantidad}-${i.presentacion_descripcion}-${i.orden_codigo}`;
 
       if (!detalleMap[clave]) {
         detalleMap[clave] = {
@@ -351,7 +351,7 @@ export const postLiquidacion = async (req, res) => {
           color: i.color_descripcion,
           corte: i.corte_descripcion,
           peso: i.peso_descripcion,
-          glaseo: i.glaseo_nombre,
+          glaseo: i.glaseo_cantidad,
           presentacion: i.presentacion_descripcion,
           orden: i.orden_codigo,
           libras: 0,
