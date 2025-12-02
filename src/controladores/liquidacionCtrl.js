@@ -272,7 +272,7 @@ export const getLiquidacionxid = async (req, res) => {
         lo.lote_libras_remitidas,
         lo.lote_n_bines,
         pr.proveedor_nombre,
-        pi.piscina_nombre,
+        pi.lote_n_piscina,
         CASE 
           WHEN lo.lote_n_bines > 0 
           THEN lo.lote_libras_remitidas / lo.lote_n_bines 
@@ -281,7 +281,7 @@ export const getLiquidacionxid = async (req, res) => {
       FROM liquidacion li
       INNER JOIN lote lo     ON lo.lote_id      = li.lote_id
       LEFT JOIN proveedor pr ON pr.proveedor_id = lo.proveedor_id
-      LEFT JOIN piscina  pi  ON pi.piscina_id   = lo.piscina_id
+      LEFT JOIN piscina  pi  ON pi.lote_n_piscina   = lo.lote_n_piscina
       WHERE li.liquidacion_id = ?
     `,
       [id]
