@@ -1,75 +1,126 @@
 import { conmysql } from "../db.js";
 
-export const getHistorialCompleto = async (req, res) => {
+// =========================================================
+//  GET /trazabilidad/:lote_id
+//  Devuelve TODO EL HISTORIAL DEL LOTE
+// =========================================================
+export const getHistorialLote = async (req, res) => {
   try {
     const { lote_id } = req.params;
 
-    // 1. RECEPCIÓN
-    const [recep] = await conmysql.query(`
-      SELECT lote_codigo, lote_libras_remitidas, lote_n_bines, lote_n_piscina,
-             (lote_libras_remitidas / lote_n_bines) AS peso_promedio,
-             proveedor_nombre, lote_fecha
-      FROM lote
-      JOIN proveedor ON proveedor.proveedor_id = lote.proveedor_id
-      WHERE lote_id = ?`, [lote_id]);
+    // ------------------------------
+    // 1️⃣ RECEPCIÓN (LOTE)
+    // ------------------------------
+    const [recepcion] = await conmysql.query(`
+      SELECT 
+        l.lote_id,
+        l.lote_codigo,
+        l.lote_libras_remitidas,
+        l.lote_n_bines,
+        l.lote_n_piscina,
+        pr.proveedor_nombre,
+        l.lote_fecha
+      FROM lote l
+      LEFT JOIN proveedor pr ON pr.proveedor_id = l.proveedor_id
+      WHERE l.lote_id = ?`, [lote_id]);
 
-    // 2. CALIDAD
-    const [cal] = await conmysql.query(`
-      SELECT defectos_total_defectos AS total_defectos,
-             defectos_basura AS basura,
-             defectos_observaciones AS obs,
-             defectos_acciones_correctivas AS acciones,
-             defectos_fecha AS fecha
-      FROM defectos WHERE lote_id = ? LIMIT 1`, [lote_id]);
+    if (!recepcion.length)
+      return res.status(404).json({ message: "Lote no encontrado" });
 
-    // 3. CLASIFICACIÓN
-    const [clas] = await conmysql.query(`
-      SELECT COUNT(*) AS coches,
-             SUM(ingresotunel_total) AS libras,
-             SUM(ingresotunel_basura) AS basura,
-             ingresotunel_fecha AS fecha
-      FROM ingresotunel WHERE lote_id = ?`, [lote_id]);
+    // ------------------------------
+    // 2️⃣ CALIDAD
+    // ------------------------------
+    const [calidad] = await conmysql.query(`
+      SELECT * FROM defectos 
+      WHERE lote_id = ?
+    `, [lote_id]);
 
-    // 4. INGRESO A TÚNEL → por tipo
-    const [tunelEntero] = await conmysql.query(`
-      SELECT COUNT(*) AS coches, SUM(ingresotunel_total) AS libras,
-             SUM(ingresotunel_basura) AS basura
-      FROM ingresotunel WHERE lote_id = ? AND tipo_id = 1`, [lote_id]);
+    // ------------------------------
+    // 3️⃣ CLASIFICACIÓN (detalle)
+    // ------------------------------
+    const [clasificacion] = await conmysql.query(`
+      SELECT * FROM clasificacion 
+      WHERE lote_id = ?
+    `, [lote_id]);
 
-    const [tunelCola] = await conmysql.query(`
-      SELECT COUNT(*) AS coches, SUM(ingresotunel_total) AS libras,
-             SUM(ingresotunel_basura) AS basura
-      FROM ingresotunel WHERE lote_id = ? AND tipo_id = 2`, [lote_id]);
+    // ------------------------------
+    // 4️⃣ DESCABEZADO
+    // ------------------------------
+    const [descabezado] = await conmysql.query(`
+      SELECT * FROM descabezado
+      WHERE lote_id = ?
+    `, [lote_id]);
 
-    // 5. MASTERIZADO
-    const [master] = await conmysql.query(`
-      SELECT SUM(master_total_libras) AS libras,
-             SUM(master_total_cajas) AS cajas,
-             SUM(master_cantidad) AS masters
-      FROM masterizado WHERE lote_id = ?`, [lote_id]);
+    // ------------------------------
+    // 5️⃣ PELADO
+    // ------------------------------
+    const [pelado] = await conmysql.query(`
+      SELECT * FROM pelado
+      WHERE lote_id = ?
+    `, [lote_id]);
 
-    // 6. LIQUIDACIÓN
-    const [liq] = await conmysql.query(`
-      SELECT liquidacion_id, liquidacion_total_libras AS empacado,
-             liquidacion_sobrante AS sobrante, liquidacion_basura AS basura,
-             liquidacion_rendimiento AS rendimiento, liquidacion_fecha AS fecha,
-             liquidacion_tipo
-      FROM liquidacion WHERE lote_id = ?`, [lote_id]);
+    // ------------------------------
+    // 6️⃣ INGRESO TÚNEL (detalle)
+    // ------------------------------
+    const [ingresos] = await conmysql.query(`
+      SELECT 
+        it.*, 
+        t.talla_descripcion AS talla,
+        c.clase_descripcion AS clase,
+        col.color_descripcion AS color,
+        co.corte_descripcion AS corte,
+        p.peso_descripcion AS peso,
+        pr.presentacion_descripcion AS presentacion,
+        g.glaseo_cantidad AS glaseo
+      FROM ingresotunel it
+      LEFT JOIN talla t ON it.talla_id = t.talla_id
+      LEFT JOIN clase c ON it.clase_id = c.clase_id
+      LEFT JOIN color col ON it.color_id = col.color_id
+      LEFT JOIN corte co ON it.corte_id = co.corte_id
+      LEFT JOIN peso p ON it.peso_id = p.peso_id
+      LEFT JOIN glaseo g ON it.glaseo_id = g.glaseo_id
+      LEFT JOIN presentacion pr ON it.presentacion_id = pr.presentacion_id
+      WHERE it.lote_id = ?
+    `, [lote_id]);
+
+    // ------------------------------
+    // 7️⃣ MASTERIZADO
+    // ------------------------------
+    const [masterizado] = await conmysql.query(`
+      SELECT * FROM masterizado
+      WHERE lote_id = ?
+    `, [lote_id]);
+
+    // ------------------------------
+    // 8️⃣ LIQUIDACIÓN ENTERO
+    // ------------------------------
+    const [liqEntero] = await conmysql.query(`
+      SELECT * FROM liquidacion
+      WHERE lote_id = ? AND liquidacion_tipo = 'Camarón Entero'
+    `, [lote_id]);
+
+    // ------------------------------
+    // 9️⃣ LIQUIDACIÓN COLA
+    // ------------------------------
+    const [liqCola] = await conmysql.query(`
+      SELECT * FROM liquidacion
+      WHERE lote_id = ? AND liquidacion_tipo = 'Camarón Cola'
+    `, [lote_id]);
 
     return res.json({
-      recepcion: recep[0] || {},
-      calidad: cal[0] || {},
-      clasificacion: clas[0] || {},
-      tunel: {
-        entero: tunelEntero[0] || {},
-        cola: tunelCola[0] || {}
-      },
-      masterizado: master[0] || {},
-      liquidacion: liq || []
+      recepcion: recepcion[0],
+      calidad,
+      clasificacion,
+      descabezado,
+      pelado,
+      ingresos_tunel: ingresos,
+      masterizado,
+      liquidacion_entero: liqEntero[0] || null,
+      liquidacion_cola: liqCola[0] || null,
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("Error Trazabilidad:", err);
     return res.status(500).json({ message: err.message });
   }
 };
