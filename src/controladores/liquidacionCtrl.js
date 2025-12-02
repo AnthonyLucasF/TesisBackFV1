@@ -226,12 +226,62 @@ export const deleteLiquidacion = async (req, res) => {
 
 import { conmysql } from "../db.js";
 
-// ---------------------------------------------------------------
-//  POST  /liquidacion   (GENERAR LIQUIDACIÓN)
-// ---------------------------------------------------------------
-// ---------------------------------------------------------------
-//  POST  /liquidacion   (GENERAR LIQUIDACIÓN)
-// ---------------------------------------------------------------
+export const getLiquidaciones = async (req, res) => {
+  try {
+    const { tipo } = req.query;
+
+    let tipoBD = "";
+    if (tipo === "entero") tipoBD = "Camarón Entero";
+    else if (tipo === "cola") tipoBD = "Camarón Cola";
+    else return res.status(400).json({ message: "Tipo no válido" });
+
+    const [filas] = await conmysql.query(`
+      SELECT liquidacion_id, lote_id, liquidacion_tipo,
+             liquidacion_rendimiento, liquidacion_basura, liquidacion_fecha
+      FROM liquidacion
+      WHERE liquidacion_tipo = ?
+      ORDER BY liquidacion_id DESC
+    `, [tipoBD]);
+
+    return res.json(filas);
+
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+export const getLiquidacionxid = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [cab] = await conmysql.query(`
+      SELECT liquidacion_id, lote_id, liquidacion_tipo,
+             liquidacion_rendimiento, liquidacion_basura,
+             liquidacion_fecha
+      FROM liquidacion
+      WHERE liquidacion_id = ?
+    `, [id]);
+
+    if (!cab.length)
+      return res.status(404).json({ message: "Liquidación no encontrada" });
+
+    const [det] = await conmysql.query(`
+      SELECT talla, clase, color, corte, peso, presentacion, orden,
+             libras, coches
+      FROM liquidacion_detalle
+      WHERE liquidacion_id = ?
+    `, [id]);
+
+    return res.json({
+      cabecera: cab[0],
+      detalles: det
+    });
+
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
 export const postLiquidacion = async (req, res) => {
   try {
     const { lote_id, tipo } = req.body;
