@@ -229,6 +229,9 @@ import { conmysql } from "../db.js";
 // ---------------------------------------------------------------
 //  POST  /liquidacion   (GENERAR LIQUIDACIÓN)
 // ---------------------------------------------------------------
+// ---------------------------------------------------------------
+//  POST  /liquidacion   (GENERAR LIQUIDACIÓN)
+// ---------------------------------------------------------------
 export const postLiquidacion = async (req, res) => {
   try {
     const { lote_id, tipo } = req.body;
@@ -236,9 +239,7 @@ export const postLiquidacion = async (req, res) => {
     if (!lote_id || !tipo)
       return res.status(400).json({ message: "Datos incompletos" });
 
-    // ==========================================================
-    // MAPEO TIPO → BD
-    // ==========================================================
+    // MAPEO TIPO
     let tipo_id = 0;
     let tipoBD = "";
 
@@ -252,19 +253,15 @@ export const postLiquidacion = async (req, res) => {
       return res.status(400).json({ message: "Tipo no válido" });
     }
 
-    // ==========================================================
-    // AUTOCORREGIR INGRESOS SIN TIPO_ID
-    // ==========================================================
+    // AUTOCORREGIR
     await conmysql.query(
-      `UPDATE ingresotunel   -- 🔥 TABLA CORRECTA
+      `UPDATE ingresotunel
        SET tipo_id = ?
        WHERE lote_id = ? AND (tipo_id = 0 OR tipo_id IS NULL)`,
       [tipo_id, lote_id]
     );
 
-    // ==========================================================
-    // CARGAR INGRESOS DEL LOTE
-    // ==========================================================
+    // CARGAR INGRESOS
     const [ingresos] = await conmysql.query(`
       SELECT it.*, 
              t.talla_descripcion,
@@ -272,10 +269,10 @@ export const postLiquidacion = async (req, res) => {
              col.color_descripcion,
              co.corte_descripcion,
              p.peso_descripcion,
-             g.glaseo_descripcion,
+             g.glaseo_nombre,
              pr.presentacion_descripcion,
              o.orden_codigo
-      FROM ingresotunel it       -- 🔥 TABLA CORRECTA
+      FROM ingresotunel it
       LEFT JOIN talla t ON it.talla_id = t.talla_id
       LEFT JOIN clase c ON it.clase_id = c.clase_id
       LEFT JOIN color col ON it.color_id = col.color_id
@@ -290,9 +287,7 @@ export const postLiquidacion = async (req, res) => {
     if (!ingresos.length)
       return res.status(400).json({ message: "No existen ingresos para este tipo" });
 
-    // ==========================================================
-    // DETECTAR INCONSISTENCIAS
-    // ==========================================================
+    // INCONSISTENCIAS
     const inconsistencias = {};
     const mapa = {};
 
@@ -311,9 +306,7 @@ export const postLiquidacion = async (req, res) => {
         inconsistencias[k] = "Variación de peso detectada";
     }
 
-    // ==========================================================
-    // ELIMINAR LIQUIDACIÓN ANTERIOR
-    // ==========================================================
+    // ELIMINAR LIQUIDACIÓN PREVIA
     const [exist] = await conmysql.query(`
       SELECT liquidacion_id
       FROM liquidacion
@@ -327,9 +320,7 @@ export const postLiquidacion = async (req, res) => {
       await conmysql.query(`DELETE FROM liquidacion WHERE liquidacion_id = ?`, [old]);
     }
 
-    // ==========================================================
     // CALCULOS
-    // ==========================================================
     const totalLibras = ingresos.reduce((s, x) => s + Number(x.ingresotunel_total), 0);
     const totalBasura = ingresos.reduce((s, x) => s + Number(x.ingresotunel_basura || 0), 0);
 
@@ -338,9 +329,7 @@ export const postLiquidacion = async (req, res) => {
         ? (totalLibras / (totalLibras + totalBasura)) * 100
         : 0;
 
-    // ==========================================================
     // INSERT CABECERA
-    // ==========================================================
     const [liq] = await conmysql.query(`
       INSERT INTO liquidacion 
       (lote_id, liquidacion_tipo, liquidacion_rendimiento, liquidacion_basura)
@@ -349,13 +338,11 @@ export const postLiquidacion = async (req, res) => {
 
     const liquidacion_id = liq.insertId;
 
-    // ==========================================================
     // INSERT DETALLES
-    // ==========================================================
     const detalleMap = {};
 
     ingresos.forEach(i => {
-      const clave = `${i.talla_descripcion}-${i.clase_descripcion}-${i.color_descripcion}-${i.corte_descripcion}-${i.peso_descripcion}-${i.glaseo_descripcion}-${i.presentacion_descripcion}-${i.orden_codigo}`;
+      const clave = `${i.talla_descripcion}-${i.clase_descripcion}-${i.color_descripcion}-${i.corte_descripcion}-${i.peso_descripcion}-${i.glaseo_nombre}-${i.presentacion_descripcion}-${i.orden_codigo}`;
 
       if (!detalleMap[clave]) {
         detalleMap[clave] = {
@@ -364,7 +351,7 @@ export const postLiquidacion = async (req, res) => {
           color: i.color_descripcion,
           corte: i.corte_descripcion,
           peso: i.peso_descripcion,
-          glaseo: i.glaseo_descripcion,
+          glaseo: i.glaseo_nombre,
           presentacion: i.presentacion_descripcion,
           orden: i.orden_codigo,
           libras: 0,
