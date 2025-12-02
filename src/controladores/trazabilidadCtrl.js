@@ -147,3 +147,27 @@ export const getHistorialLoteBase = async (lote_id, res) => {
     res.status(500).json({ message: "Error al obtener historial", error: error.message });
   }
 };
+
+export const getHistorialPorCodigo = async (req, res) => {
+  try {
+    const { codigo } = req.params;
+
+    const [lote] = await conmysql.query(
+      `SELECT * FROM lote WHERE lote_codigo = ?`,
+      [codigo]
+    );
+
+    if (!lote.length) {
+      return res.status(404).json({ message: "Código no encontrado" });
+    }
+
+    // Reutilizamos getHistorialLote usando el lote_id encontrado
+    req.params.lote_id = lote[0].lote_id;
+    return getHistorialLote(req, res);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error al buscar lote por código" });
+  }
+};
+
