@@ -22,16 +22,30 @@ async function buildHistorialLote(lote_id) {
 
   // 2) CONTROL DE CALIDAD
   const [calidad] = await conmysql.query(`
-    SELECT 
-      cc.*,
-      u.usuario_nombre,
-      col.color_descripcion
-    FROM control_calidad cc
-    LEFT JOIN usuario u ON u.usuario_id = cc.usuario_id
-    LEFT JOIN color col ON col.color_id = cc.color_id
-    WHERE cc.lote_id = ?
-    ORDER BY cc.c_calidad_id ASC
-  `, [lote_id]);
+  SELECT 
+    cc.*,
+    u.usuario_nombre,
+    col.color_descripcion,
+
+    -- DEFECTOS
+    d.defecto1,
+    d.defecto2,
+    d.defecto3,
+    d.defecto4,
+    d.defecto5,
+    d.defecto6,
+    d.defecto7,
+    d.defecto8,
+    d.defecto9,
+    d.defecto10
+
+  FROM control_calidad cc
+  LEFT JOIN usuario u ON u.usuario_id = cc.usuario_id
+  LEFT JOIN color col ON col.color_id = cc.color_id
+  LEFT JOIN defectos d ON d.defectos_id = cc.defectos_id
+  WHERE cc.lote_id = ?
+  ORDER BY cc.c_calidad_id ASC
+`, [lote_id]);
 
   // 3) CLASIFICACIÓN
   const [clasificacion] = await conmysql.query(`
