@@ -328,36 +328,43 @@ export const postLiquidacion = async (req, res) => {
 };
  */
 
-// src/controladores/liquidacionCtrl.js
+
 import { conmysql } from "../db.js";
 
 const mapTipoBD = (tipo) => {
-  if (tipo === "entero") return { tipoBD: "Camarón Entero", tipoId: 1 };
-  if (tipo === "cola") return { tipoBD: "Camarón Cola", tipoId: 2 };
-  return null;
+  switch (tipo) {
+    case "entero":
+      return { tipoBD: "Camarón Entero", tipoId: 1 };
+    case "cola":
+      return { tipoBD: "Camarón Cola", tipoId: 2 };
+    default:
+      return null;
+  }
 };
 
-// ================================================
+// ===========================================================
 // LISTAR LIQUIDACIONES
-// ================================================
+// ===========================================================
 export const getLiquidaciones = async (req, res) => {
   try {
     const { tipo } = req.query;
     const map = mapTipoBD(tipo);
     if (!map) return res.status(400).json({ message: "Tipo no válido" });
 
-    const [rows] = await conmysql.query(
+    const [filas] = await conmysql.query(
       `
       SELECT 
         li.liquidacion_id,
         li.lote_id,
         lo.lote_codigo,
         lo.lote_libras_remitidas,
-        li.liquidacion_total_libras AS total_libras,
+        lo.lote_n_bines,
+        li.liquidacion_tipo,
+        li.liquidacion_rendimiento,
         li.liquidacion_basura,
         li.liquidacion_sobrante,
+        li.liquidacion_total_libras AS total_libras,
         li.total_cajas,
-        li.liquidacion_rendimiento,
         li.liquidacion_fecha
       FROM liquidacion li
       INNER JOIN lote lo ON lo.lote_id = li.lote_id
@@ -367,24 +374,26 @@ export const getLiquidaciones = async (req, res) => {
       [map.tipoBD]
     );
 
-    res.json(rows);
-  } catch (e) {
-    res.status(500).json({ message: e.message });
+    res.json(filas);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
   }
 };
 
-// ================================================
-// OBTENER DETALLE POR ID
-// ================================================
+// ===========================================================
+// DETALLE
+// ===========================================================
 export const getLiquidacionxid = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [[cab]] = await conmysql.query(
+    const [cab] = await conmysql.query(
       `
       SELECT 
         li.liquidacion_id,
         li.lote_id,
+        lo.lote_codigo,
         li.liquidacion_tipo,
         li.liquidacion_rendimiento,
         li.liquidacion_basura,
@@ -392,65 +401,61 @@ export const getLiquidacionxid = async (req, res) => {
         li.liquidacion_total_libras AS total_libras,
         li.total_cajas,
         li.liquidacion_fecha,
-
-        lo.lote_codigo,
         lo.lote_libras_remitidas,
         lo.lote_n_bines,
-        lo.lote_n_piscina,
-
         pr.proveedor_nombre,
-
-        CASE WHEN lo.lote_n_bines > 0 
+        lo.lote_n_piscina,
+        CASE 
+          WHEN lo.lote_n_bines > 0 
           THEN lo.lote_libras_remitidas / lo.lote_n_bines
-          ELSE 0 END AS peso_promedio
-
+          ELSE 0 
+        END AS peso_promedio
       FROM liquidacion li
-      INNER JOIN lote lo ON lo.lote_id = li.lote_id
+      INNER JOIN lote lo     ON lo.lote_id      = li.lote_id
       LEFT JOIN proveedor pr ON pr.proveedor_id = lo.proveedor_id
       WHERE li.liquidacion_id = ?
     `,
       [id]
     );
 
-    if (!cab) return res.status(404).json({ message: "No existe" });
-
     const [det] = await conmysql.query(
       `
-      SELECT talla, clase, color, corte, 
-             peso, glaseo, presentacion,
-             orden, cajas, coches, libras
+      SELECT 
+        talla, clase, color, corte, peso, glaseo,
+        presentacion, orden,
+        cajas, coches, libras
       FROM liquidacion_detalle
       WHERE liquidacion_id = ?
-      ORDER BY clase, talla, orden, glaseo, color
+      ORDER BY clase, talla, orden
     `,
       [id]
     );
 
-    res.json({
-      cabecera: cab,
+    return res.json({
+      cabecera: cab[0],
       detalles: det,
     });
-  } catch (e) {
-    res.status(500).json({ message: e.message });
+
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
 };
 
-// ================================================
-// CREAR LIQUIDACIÓN (ENTERO / COLA)
-// ================================================
+// ===========================================================
+// CREAR LIQUIDACIÓN
+// ===========================================================
 export const postLiquidacion = async (req, res) => {
   try {
     const { lote_id, tipo } = req.body;
+
     const map = mapTipoBD(tipo);
     if (!map) return res.status(400).json({ message: "Tipo inválido" });
 
-    // Reparar ingresos sin tipo_id
     await conmysql.query(
       `UPDATE ingresotunel SET tipo_id=? WHERE lote_id=? AND (tipo_id=0 OR tipo_id IS NULL)`,
       [map.tipoId, lote_id]
     );
 
-    // Obtener ingresos
     const [ing] = await conmysql.query(
       `
       SELECT it.*,
@@ -463,43 +468,40 @@ export const postLiquidacion = async (req, res) => {
              pr.presentacion_descripcion,
              o.orden_codigo
       FROM ingresotunel it
-      LEFT JOIN talla t ON it.talla_id = t.talla_id
-      LEFT JOIN clase c ON it.clase_id = c.clase_id
-      LEFT JOIN color col ON it.color_id = col.color_id
-      LEFT JOIN corte co ON it.corte_id = co.corte_id
-      LEFT JOIN peso p ON it.peso_id = p.peso_id
-      LEFT JOIN glaseo g ON it.glaseo_id = g.glaseo_id
-      LEFT JOIN presentacion pr ON it.presentacion_id = pr.presentacion_id
-      LEFT JOIN orden o ON it.orden_id = o.orden_id
+      LEFT JOIN talla t ON it.talla_id=t.talla_id
+      LEFT JOIN clase c ON it.clase_id=c.clase_id
+      LEFT JOIN color col ON it.color_id=col.color_id
+      LEFT JOIN corte co ON it.corte_id=co.corte_id
+      LEFT JOIN peso p ON it.peso_id=p.peso_id
+      LEFT JOIN glaseo g ON it.glaseo_id=g.glaseo_id
+      LEFT JOIN presentacion pr ON it.presentacion_id=pr.presentacion_id
+      LEFT JOIN orden o ON it.orden_id=o.orden_id
       WHERE it.lote_id=? AND it.tipo_id=?
     `,
       [lote_id, map.tipoId]
     );
 
     if (!ing.length)
-      return res.status(400).json({ message: "No existen ingresos para este tipo" });
+      return res.status(400).json({ message: "No ingresos" });
 
-    // Datos del lote
-    const [[l]] = await conmysql.query(
-      `SELECT lote_libras_remitidas FROM lote WHERE lote_id = ?`,
+    // LOTES
+    const [[lot]] = await conmysql.query(
+      `SELECT lote_libras_remitidas FROM lote WHERE lote_id=?`,
       [lote_id]
     );
 
-    const remitidas = Number(l.lote_libras_remitidas);
+    const remitidas = Number(lot.lote_libras_remitidas);
 
     // SUMAS
     const totalLibras = ing.reduce((s, x) => s + Number(x.ingresotunel_total || 0), 0);
     const totalBasura = ing.reduce((s, x) => s + Number(x.ingresotunel_basura || 0), 0);
 
-    // SOBRANTE REAL
     let sobrante = remitidas - totalLibras - totalBasura;
     if (sobrante < 0) sobrante = 0;
 
-    // RENDIMIENTO
-    const rendimiento =
-      totalLibras + totalBasura > 0
-        ? (totalLibras / (totalLibras + totalBasura)) * 100
-        : 0;
+    const rendimiento = totalLibras + totalBasura > 0
+      ? (totalLibras / (totalLibras + totalBasura)) * 100
+      : 0;
 
     // ELIMINAR PREVIA
     const [old] = await conmysql.query(
@@ -513,8 +515,7 @@ export const postLiquidacion = async (req, res) => {
     }
 
     // AGRUPACIÓN
-    const group = {};
-
+    const detMap = {};
     ing.forEach(i => {
       const key = [
         i.clase_descripcion,
@@ -527,8 +528,8 @@ export const postLiquidacion = async (req, res) => {
         i.peso_descripcion
       ].join("|");
 
-      if (!group[key]) {
-        group[key] = {
+      if (!detMap[key]) {
+        detMap[key] = {
           clase: i.clase_descripcion,
           talla: i.talla_descripcion,
           orden: i.orden_codigo,
@@ -543,20 +544,19 @@ export const postLiquidacion = async (req, res) => {
         };
       }
 
-      // Si vienen cajas, se suma; si no, se asume 0
-      group[key].cajas += Number(i.ingresotunel_cajas || 0);
-      group[key].coches += 1;
-      group[key].libras += Number(i.ingresotunel_total || 0);
+      detMap[key].cajas += Number(i.ingresotunel_cajas || 0);
+      detMap[key].coches += 1;
+      detMap[key].libras += Number(i.ingresotunel_total);
     });
 
-    const totalCajas = Object.values(group).reduce((s, x) => s + x.cajas, 0);
+    const totalCajas = Object.values(detMap).reduce((s, d) => s + d.cajas, 0);
 
     // INSERT CABECERA
     const [ins] = await conmysql.query(
       `
-      INSERT INTO liquidacion 
+      INSERT INTO liquidacion
       (lote_id, liquidacion_tipo, liquidacion_rendimiento,
-       liquidacion_basura, liquidacion_sobrante,
+       liquidacion_basura, liquidacion_sobrante, 
        liquidacion_total_libras, total_cajas)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
@@ -565,8 +565,8 @@ export const postLiquidacion = async (req, res) => {
 
     const liquidacion_id = ins.insertId;
 
-    // INSERT DETALLES
-    for (const d of Object.values(group)) {
+    // DETALLES
+    for (const d of Object.values(detMap)) {
       await conmysql.query(
         `
         INSERT INTO liquidacion_detalle
@@ -585,8 +585,8 @@ export const postLiquidacion = async (req, res) => {
 
     res.json({ liquidacion_id });
 
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: e.message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
   }
 };
