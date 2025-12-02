@@ -31,6 +31,7 @@ import peladoRoutes from './routes/pelado.routes.js';
 
 import gerenciaRoutes from './routes/gerencia.routes.js'; // M6 Órdenes
 import reportesRoutes from './routes/reportes.routes.js'; // M7 Reportes/Historial
+import trazabilidadRoutes from './routes/trazabilidad.routes.js'; // M7 Trazabilidad
 
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -89,6 +90,7 @@ app.use('/api', peladoRoutes);
 
 app.use('/api', gerenciaRoutes);     // M6 Órdenes
 app.use('/api', reportesRoutes);     // M7 Reportes/Historial
+app.use('/api', trazabilidadRoutes); // M7 Trazabilidad
 
 app.get("/api", (req, res) => {
     res.json({
