@@ -1,7 +1,11 @@
 import { conmysql } from "../db.js";
 
+/* ────────────────────────────────────────────────
+    FUNCIÓN BASE (Centraliza toda la lógica)
+────────────────────────────────────────────────── */
 export const getHistorialLoteBase = async (lote_id, res) => {
   try {
+
     // 1) DATOS GENERALES
     const [lote] = await conmysql.query(`
       SELECT 
@@ -102,16 +106,17 @@ export const getHistorialLoteBase = async (lote_id, res) => {
       ORDER BY liquidacion_id ASC
     `, [lote_id]);
 
-    // 9) DETALLES DE LIQUIDACIÓN
+    // 9) DETALLE LIQUIDACIÓN
     const [detalle_liquidacion] = await conmysql.query(`
-      SELECT * FROM liquidacion_detalle 
+      SELECT *
+      FROM liquidacion_detalle
       WHERE liquidacion_id IN (
         SELECT liquidacion_id FROM liquidacion WHERE lote_id = ?
       )
       ORDER BY detalle_id ASC
     `, [lote_id]);
 
-    // 10) AUDITORÍA
+    // 10) AUDITORIA
     const [auditoria] = await conmysql.query(`
       SELECT a.*, u.usuario_nombre 
       FROM auditoria a
@@ -120,7 +125,7 @@ export const getHistorialLoteBase = async (lote_id, res) => {
       ORDER BY a.auditoria_id ASC
     `, [`%Lote ID: ${lote_id}%`]);
 
-    // 11) HISTORIAL JSON
+    // 11) JSON HISTORIAL
     let historial_json = {};
     try {
       historial_json = JSON.parse(lote[0].lote_historial || "{}");
@@ -128,6 +133,7 @@ export const getHistorialLoteBase = async (lote_id, res) => {
       historial_json = {};
     }
 
+    // RESPUESTA FINAL
     res.json({
       lote: lote[0],
       calidad,
@@ -148,6 +154,19 @@ export const getHistorialLoteBase = async (lote_id, res) => {
   }
 };
 
+
+/* ────────────────────────────────────────────────
+    BUSCAR POR ID (usado por /trazabilidad/:lote_id)
+────────────────────────────────────────────────── */
+export const getHistorialLote = async (req, res) => {
+  const { lote_id } = req.params;
+  return getHistorialLoteBase(lote_id, res);
+};
+
+
+/* ────────────────────────────────────────────────
+    BUSCAR POR CÓDIGO (CORREGIDO)
+────────────────────────────────────────────────── */
 export const getHistorialPorCodigo = async (req, res) => {
   try {
     const { codigo } = req.params;
@@ -161,13 +180,13 @@ export const getHistorialPorCodigo = async (req, res) => {
       return res.status(404).json({ message: "Código no encontrado" });
     }
 
-    // Reutilizamos getHistorialLote usando el lote_id encontrado
-    req.params.lote_id = lote[0].lote_id;
-    return getHistorialLote(req, res);
+    return getHistorialLoteBase(lote[0].lote_id, res);
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Error al buscar lote por código" });
+    return res.status(500).json({
+      message: "Error al buscar lote por código",
+      error: err.message
+    });
   }
 };
-

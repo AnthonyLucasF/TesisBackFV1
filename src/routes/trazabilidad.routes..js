@@ -1,6 +1,9 @@
 // src/routes/trazabilidad.routes.js
 import { Router } from "express";
-import { getHistorialLote, getHistorialPorCodigo } from '../controladores/trazabilidadCtrl.js';
+import {
+  getHistorialLote,
+  getHistorialPorCodigo
+} from "../controladores/trazabilidadCtrl.js";
 
 const router = Router();
 
