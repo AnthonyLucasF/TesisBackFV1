@@ -1,9 +1,13 @@
 // src/routes/trazabilidad.routes.js
 import { Router } from "express";
-import { getHistorialLote } from '../controladores/trazabilidadCtrl.js';
+import { getHistorialLote, getHistorialPorCodigo } from '../controladores/trazabilidadCtrl.js';
 
 const router = Router();
 
-router.get('/trazabilidad', getHistorialLote);  // ?query=codigo or id
+// Buscar por ID del lote
+router.get('/trazabilidad/:lote_id', getHistorialLote);
+
+// Buscar por CÓDIGO del lote
+router.get('/trazabilidad/codigo/:codigo', getHistorialPorCodigo);
 
 export default router;

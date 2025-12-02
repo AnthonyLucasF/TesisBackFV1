@@ -1,11 +1,8 @@
 import { conmysql } from "../db.js";
 
-// GET /trazabilidad/:lote_id
-export const getHistorialLote = async (req, res) => {
+export const getHistorialLoteBase = async (lote_id, res) => {
   try {
-    const { lote_id } = req.params;
-
-    // 1) Datos generales del lote
+    // 1) DATOS GENERALES
     const [lote] = await conmysql.query(`
       SELECT 
         l.*, 
@@ -29,7 +26,7 @@ export const getHistorialLote = async (req, res) => {
       return res.status(404).json({ message: "Lote no encontrado" });
     }
 
-    // 2) Control de Calidad
+    // 2) CALIDAD
     const [calidad] = await conmysql.query(`
       SELECT cc.*, u.usuario_nombre 
       FROM control_calidad cc
@@ -38,7 +35,7 @@ export const getHistorialLote = async (req, res) => {
       ORDER BY cc.c_calidad_id ASC
     `, [lote_id]);
 
-    // 3) Clasificación (enteros y colas)
+    // 3) CLASIFICACIÓN
     const [clasificacion] = await conmysql.query(`
       SELECT c.*, 
         t.tipo_descripcion,
@@ -60,7 +57,7 @@ export const getHistorialLote = async (req, res) => {
       ORDER BY c.clasificacion_id ASC
     `, [lote_id]);
 
-    // 4) Descabezado
+    // 4) DESCABEZADO
     const [descabezado] = await conmysql.query(`
       SELECT d.*, u.usuario_nombre 
       FROM descabezado d
@@ -69,7 +66,7 @@ export const getHistorialLote = async (req, res) => {
       ORDER BY d.descabezado_id ASC
     `, [lote_id]);
 
-    // 5) Pelado
+    // 5) PELADO
     const [pelado] = await conmysql.query(`
       SELECT p.*, u.usuario_nombre 
       FROM pelado p
@@ -78,7 +75,7 @@ export const getHistorialLote = async (req, res) => {
       ORDER BY p.pelado_id ASC
     `, [lote_id]);
 
-    // 6) Ingreso a Túnel
+    // 6) INGRESO TÚNEL
     const [ingreso_tunel] = await conmysql.query(`
       SELECT it.*, pr.presentacion_descripcion, pe.peso_descripcion 
       FROM ingresotunel it
@@ -88,7 +85,7 @@ export const getHistorialLote = async (req, res) => {
       ORDER BY it.ingresotunel_id ASC
     `, [lote_id]);
 
-    // 7) Masterizado
+    // 7) MASTERIZADO
     const [masterizado] = await conmysql.query(`
       SELECT m.*, c.coche_descripcion, u.usuario_nombre
       FROM masterizado m
@@ -98,13 +95,14 @@ export const getHistorialLote = async (req, res) => {
       ORDER BY m.masterizado_id ASC
     `, [lote_id]);
 
-    // 8) Liquidaciones
+    // 8) LIQUIDACIONES
     const [liquidaciones] = await conmysql.query(`
       SELECT * FROM liquidacion 
       WHERE lote_id = ?
       ORDER BY liquidacion_id ASC
     `, [lote_id]);
 
+    // 9) DETALLES DE LIQUIDACIÓN
     const [detalle_liquidacion] = await conmysql.query(`
       SELECT * FROM liquidacion_detalle 
       WHERE liquidacion_id IN (
@@ -113,7 +111,7 @@ export const getHistorialLote = async (req, res) => {
       ORDER BY detalle_id ASC
     `, [lote_id]);
 
-    // 9) Auditoría
+    // 10) AUDITORÍA
     const [auditoria] = await conmysql.query(`
       SELECT a.*, u.usuario_nombre 
       FROM auditoria a
@@ -122,11 +120,11 @@ export const getHistorialLote = async (req, res) => {
       ORDER BY a.auditoria_id ASC
     `, [`%Lote ID: ${lote_id}%`]);
 
-    // 10) Historial JSON del lote
+    // 11) HISTORIAL JSON
     let historial_json = {};
     try {
       historial_json = JSON.parse(lote[0].lote_historial || "{}");
-    } catch (e) {
+    } catch {
       historial_json = {};
     }
 
@@ -139,13 +137,13 @@ export const getHistorialLote = async (req, res) => {
       ingreso_tunel,
       masterizado,
       liquidaciones,
-      liquidacion_detalle: detalle_liquidacion,
+      liquidacion_detalle,
       auditoria,
       historial_json
     });
 
   } catch (error) {
-    console.error("Error getHistorialLote:", error);
-    res.status(500).json({ message: "Error al obtener historial del lote", error: error.message });
+    console.error("Error:", error);
+    res.status(500).json({ message: "Error al obtener historial", error: error.message });
   }
 };
