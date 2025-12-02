@@ -1,7 +1,7 @@
 // src/controladores/masterizadoCtrl.js
 import { conmysql } from "../db.js";
 
-// GET /masterizado - Listar todos los masters
+// GET /masterizado  -> Listar todos los masters
 export const getMasterizado = async (req, res) => {
   try {
     const [rows] = await conmysql.query(`
@@ -10,31 +10,31 @@ export const getMasterizado = async (req, res) => {
         m.lote_id,
         m.coche_id,
         m.usuario_id,
-        m.master_type AS master_tipo,
-        m.masterizado_total_master AS master_cantidad,
-        m.masterizado_total_cajas AS master_total_cajas,
-        m.masterizado_total_libras AS master_total_libras,
+        m.master_type,
         m.masterizado_fecha,
+        m.masterizado_total_libras,
+        m.masterizado_total_cajas,
+        m.masterizado_total_master,
         m.masterizado_observaciones,
         m.masterizado_estado,
         l.lote_codigo,
         u.usuario_nombre,
         c.coche_descripcion
       FROM masterizado m
-      LEFT JOIN lote l   ON m.lote_id  = l.lote_id
+      LEFT JOIN lote   l ON m.lote_id  = l.lote_id
       LEFT JOIN usuario u ON m.usuario_id = u.usuario_id
-      LEFT JOIN coche c   ON m.coche_id = c.coche_id
+      LEFT JOIN coche  c ON m.coche_id = c.coche_id
       ORDER BY m.masterizado_fecha DESC, m.masterizado_id DESC
     `);
 
     res.json(rows);
   } catch (error) {
-    console.error("Error en getMasterizado:", error);
-    res.status(500).json({ message: "Error listando masterizado", error: error.message });
+    console.error("Error getMasterizado:", error);
+    res.status(500).json({ message: "Error al listar masterizado", error: error.message });
   }
 };
 
-// GET /masterizado/:id - Obtener un master por ID
+// GET /masterizado/:id  -> Detalle por ID
 export const getMasterizadoxid = async (req, res) => {
   try {
     const { id } = req.params;
@@ -45,36 +45,35 @@ export const getMasterizadoxid = async (req, res) => {
         m.lote_id,
         m.coche_id,
         m.usuario_id,
-        m.master_type AS master_tipo,
-        m.masterizado_total_master AS master_cantidad,
-        m.masterizado_total_cajas AS master_total_cajas,
-        m.masterizado_total_libras AS master_total_libras,
+        m.master_type,
         m.masterizado_fecha,
+        m.masterizado_total_libras,
+        m.masterizado_total_cajas,
+        m.masterizado_total_master,
         m.masterizado_observaciones,
         m.masterizado_estado,
         l.lote_codigo,
         u.usuario_nombre,
         c.coche_descripcion
       FROM masterizado m
-      LEFT JOIN lote l   ON m.lote_id  = l.lote_id
+      LEFT JOIN lote   l ON m.lote_id  = l.lote_id
       LEFT JOIN usuario u ON m.usuario_id = u.usuario_id
-      LEFT JOIN coche c   ON m.coche_id = c.coche_id
+      LEFT JOIN coche  c ON m.coche_id = c.coche_id
       WHERE m.masterizado_id = ?
-      LIMIT 1
     `, [id]);
 
     if (rows.length === 0) {
-      return res.status(404).json({ message: "Master no encontrado" });
+      return res.status(404).json({ message: "Masterizado no encontrado" });
     }
 
     res.json(rows[0]);
   } catch (error) {
-    console.error("Error en getMasterizadoxid:", error);
-    res.status(500).json({ message: "Error obteniendo masterizado", error: error.message });
+    console.error("Error getMasterizadoxid:", error);
+    res.status(500).json({ message: "Error al obtener detalle de masterizado", error: error.message });
   }
 };
 
-// POST /masterizado - Crear un nuevo master
+// POST /masterizado  -> Crear
 export const postMasterizado = async (req, res) => {
   try {
     const {
@@ -82,60 +81,70 @@ export const postMasterizado = async (req, res) => {
       coche_id,
       usuario_id,
       masterizado_fecha,
-      master_tipo,             // '6' | '10' | '12'
-      master_cantidad,         // número de masters
-      master_total_cajas,      // total de cajas
-      master_total_libras,     // total de libras
+      master_type, // '6' | '10' | '12'
+      masterizado_total_libras,
+      masterizado_total_cajas,
+      masterizado_total_master,
       masterizado_observaciones,
       masterizado_estado = 'pendiente'
     } = req.body;
 
-    if (!lote_id || !usuario_id || !master_tipo || !master_cantidad) {
-      return res.status(400).json({ message: "Datos incompletos para crear master" });
-    }
-
     const [result] = await conmysql.query(`
-      INSERT INTO masterizado (
-        lote_id,
-        coche_id,
-        usuario_id,
-        master_type,
-        masterizado_fecha,
-        masterizado_total_libras,
-        masterizado_total_cajas,
-        masterizado_total_master,
-        masterizado_observaciones,
-        masterizado_estado
-      )
+      INSERT INTO masterizado
+      (lote_id, coche_id, usuario_id, master_type, masterizado_fecha,
+       masterizado_total_libras, masterizado_total_cajas, masterizado_total_master,
+       masterizado_observaciones, masterizado_estado)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      lote_id,
+      lote_id || null,
       coche_id || null,
-      usuario_id,
-      master_tipo,
-      masterizado_fecha,
-      master_total_libras || 0,
-      master_total_cajas || 0,
-      master_cantidad || 0,
+      usuario_id || null,
+      master_type || '12',
+      masterizado_fecha || new Date(),
+      masterizado_total_libras || 0,
+      masterizado_total_cajas || 0,
+      masterizado_total_master || 0,
       masterizado_observaciones || null,
-      masterizado_estado
+      masterizado_estado || 'pendiente'
     ]);
 
-    const payload = { masterizado_id: result.insertId };
+    const masterizado_id = result.insertId;
 
-    global._io?.emit("masterizado_nuevo", payload);
+    // Emitir evento por WebSocket si está configurado
+    global._io?.emit("masterizado_nuevo", { masterizado_id });
 
-    res.json({
-      masterizado_id: result.insertId,
-      message: "Master creado correctamente"
-    });
+    // Devolver el registro recién creado con joins
+    const [rows] = await conmysql.query(`
+      SELECT 
+        m.masterizado_id,
+        m.lote_id,
+        m.coche_id,
+        m.usuario_id,
+        m.master_type,
+        m.masterizado_fecha,
+        m.masterizado_total_libras,
+        m.masterizado_total_cajas,
+        m.masterizado_total_master,
+        m.masterizado_observaciones,
+        m.masterizado_estado,
+        l.lote_codigo,
+        u.usuario_nombre,
+        c.coche_descripcion
+      FROM masterizado m
+      LEFT JOIN lote   l ON m.lote_id  = l.lote_id
+      LEFT JOIN usuario u ON m.usuario_id = u.usuario_id
+      LEFT JOIN coche  c ON m.coche_id = c.coche_id
+      WHERE m.masterizado_id = ?
+    `, [masterizado_id]);
+
+    res.json(rows[0]);
   } catch (error) {
-    console.error("Error en postMasterizado:", error);
-    res.status(500).json({ message: "Error creando masterizado", error: error.message });
+    console.error("Error postMasterizado:", error);
+    res.status(500).json({ message: "Error al crear masterizado", error: error.message });
   }
 };
 
-// PUT /masterizado/:id - Actualizar un master
+// PUT /masterizado/:id  -> Actualizar
 export const putMasterizado = async (req, res) => {
   try {
     const { id } = req.params;
@@ -144,15 +153,15 @@ export const putMasterizado = async (req, res) => {
       coche_id,
       usuario_id,
       masterizado_fecha,
-      master_tipo,
-      master_cantidad,
-      master_total_cajas,
-      master_total_libras,
+      master_type,
+      masterizado_total_libras,
+      masterizado_total_cajas,
+      masterizado_total_master,
       masterizado_observaciones,
       masterizado_estado
     } = req.body;
 
-    const [result] = await conmysql.query(`
+    await conmysql.query(`
       UPDATE masterizado SET
         lote_id = ?,
         coche_id = ?,
@@ -166,51 +175,43 @@ export const putMasterizado = async (req, res) => {
         masterizado_estado = ?
       WHERE masterizado_id = ?
     `, [
-      lote_id,
+      lote_id || null,
       coche_id || null,
-      usuario_id,
-      master_tipo,
-      masterizado_fecha,
-      master_total_libras || 0,
-      master_total_cajas || 0,
-      master_cantidad || 0,
+      usuario_id || null,
+      master_type || '12',
+      masterizado_fecha || new Date(),
+      masterizado_total_libras || 0,
+      masterizado_total_cajas || 0,
+      masterizado_total_master || 0,
       masterizado_observaciones || null,
-      masterizado_estado,
+      masterizado_estado || 'pendiente',
       id
     ]);
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Master no encontrado para actualizar" });
-    }
-
     global._io?.emit("masterizado_actualizado", { masterizado_id: id });
 
-    res.json({ message: "Master actualizado correctamente" });
+    res.json({ message: "Masterizado actualizado correctamente" });
   } catch (error) {
-    console.error("Error en putMasterizado:", error);
-    res.status(500).json({ message: "Error actualizando masterizado", error: error.message });
+    console.error("Error putMasterizado:", error);
+    res.status(500).json({ message: "Error al actualizar masterizado", error: error.message });
   }
 };
 
-// DELETE /masterizado/:id - Eliminar un master
+// DELETE /masterizado/:id  -> Eliminar
 export const deleteMasterizado = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [result] = await conmysql.query(
+    await conmysql.query(
       "DELETE FROM masterizado WHERE masterizado_id = ?",
       [id]
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Master no encontrado para eliminar" });
-    }
-
     global._io?.emit("masterizado_eliminado", { masterizado_id: id });
 
-    res.json({ message: "Master eliminado correctamente" });
+    res.json({ message: "Masterizado eliminado correctamente" });
   } catch (error) {
-    console.error("Error en deleteMasterizado:", error);
-    res.status(500).json({ message: "Error eliminando masterizado", error: error.message });
+    console.error("Error deleteMasterizado:", error);
+    res.status(500).json({ message: "Error al eliminar masterizado", error: error.message });
   }
 };
