@@ -8,9 +8,9 @@ import {
 const router = Router();
 
 // Buscar por ID del lote
-router.get('/trazabilidad/:lote_id', getHistorialLote);
+router.get("/trazabilidad/:lote_id", getHistorialLote);
 
 // Buscar por CÓDIGO del lote
-router.get('/trazabilidad/codigo/:codigo', getHistorialPorCodigo);
+router.get("/trazabilidad/codigo/:codigo", getHistorialPorCodigo);
 
 export default router;

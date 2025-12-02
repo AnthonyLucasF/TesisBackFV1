@@ -1,7 +1,7 @@
 import { conmysql } from "../db.js";
 
 // GET historial lote (básico, directo desde DB)
-export const getHistorialLote = async (req, res) => {
+export const getHistorialLotexd = async (req, res) => {
   try {
     const { lote_id } = req.params;
 
