@@ -1,82 +1,147 @@
-// src/controladores/trazabilidadCtrl.js
 import { conmysql } from "../db.js";
 
-// GET /trazabilidad/:lote_id  -> Historial completo del lote
+// GET /trazabilidad/:lote_id
 export const getHistorialLote = async (req, res) => {
   try {
     const { lote_id } = req.params;
 
-    // 1. Datos generales del lote
+    // 1) Datos generales del lote
     const [lote] = await conmysql.query(`
       SELECT 
-        l.lote_id, l.lote_codigo, l.lote_tipo, l.lote_fecha_ingreso, 
-        l.lote_hora_ingreso, l.lote_libras_remitidas, l.lote_peso_promedio,
-        t.tipo_descripcion, c.color_descripcion, cls.clase_descripcion,
-        p.proveedor_nombre
+        l.*, 
+        p.proveedor_nombre,
+        c.chofer_nombre,
+        v.vehiculo_placa,
+        t.tipo_descripcion,
+        cl.clase_descripcion,
+        co.color_descripcion
       FROM lote l
-      LEFT JOIN tipo t ON l.tipo_id = t.tipo_id
-      LEFT JOIN color c ON l.color_id = c.color_id
-      LEFT JOIN clase cls ON l.clase_id = cls.clase_id
       LEFT JOIN proveedor p ON l.proveedor_id = p.proveedor_id
+      LEFT JOIN chofer c ON l.chofer_id = c.chofer_id
+      LEFT JOIN vehiculo v ON l.vehiculo_id = v.vehiculo_id
+      LEFT JOIN tipo t ON l.tipo_id = t.tipo_id
+      LEFT JOIN clase cl ON l.clase_id = cl.clase_id
+      LEFT JOIN color co ON l.color_id = co.color_id
       WHERE l.lote_id = ?
     `, [lote_id]);
 
-    if (lote.length === 0) {
+    if (!lote.length) {
       return res.status(404).json({ message: "Lote no encontrado" });
     }
 
-    // 2. Control de calidad
+    // 2) Control de Calidad
     const [calidad] = await conmysql.query(`
-      SELECT * FROM control_calidad 
-      WHERE lote_id = ? ORDER BY c_calidad_id ASC
+      SELECT cc.*, u.usuario_nombre 
+      FROM control_calidad cc
+      LEFT JOIN usuario u ON cc.usuario_id = u.usuario_id
+      WHERE cc.lote_id = ?
+      ORDER BY cc.c_calidad_id ASC
     `, [lote_id]);
 
-    // 3. Descabezado
-    const [descabezado] = await conmysql.query(`
-      SELECT * FROM descabezado 
-      WHERE lote_id = ? ORDER BY descabezado_id ASC
-    `, [lote_id]);
-
-    // 4. Pelado
-    const [pelado] = await conmysql.query(`
-      SELECT * FROM pelado 
-      WHERE lote_id = ? ORDER BY pelado_id ASC
-    `, [lote_id]);
-
-    // 5. Clasificación
+    // 3) Clasificación (enteros y colas)
     const [clasificacion] = await conmysql.query(`
-      SELECT * FROM clasificacion 
-      WHERE lote_id = ? ORDER BY clasificacion_id ASC
+      SELECT c.*, 
+        t.tipo_descripcion,
+        cl.clase_descripcion,
+        co.color_descripcion,
+        ta.talla_descripcion,
+        p.peso_descripcion,
+        pr.presentacion_descripcion,
+        u.usuario_nombre
+      FROM clasificacion c
+      LEFT JOIN tipo t ON c.tipo_id = t.tipo_id
+      LEFT JOIN clase cl ON c.clase_id = cl.clase_id
+      LEFT JOIN color co ON c.color_id = co.color_id
+      LEFT JOIN talla ta ON c.talla_id = ta.talla_id
+      LEFT JOIN peso p ON c.peso_id = p.peso_id
+      LEFT JOIN presentacion pr ON c.presentacion_id = pr.presentacion_id
+      LEFT JOIN usuario u ON c.usuario_id = u.usuario_id
+      WHERE c.lote_id = ?
+      ORDER BY c.clasificacion_id ASC
     `, [lote_id]);
 
-    // 6. Ingreso a túnel
-    const [ingresosTunel] = await conmysql.query(`
-      SELECT * FROM ingresotunel 
-      WHERE lote_id = ? ORDER BY ingresotunel_id ASC
+    // 4) Descabezado
+    const [descabezado] = await conmysql.query(`
+      SELECT d.*, u.usuario_nombre 
+      FROM descabezado d
+      LEFT JOIN usuario u ON d.usuario_id = u.usuario_id
+      WHERE d.lote_id = ?
+      ORDER BY d.descabezado_id ASC
     `, [lote_id]);
 
-    // 7. Liquidaciones (entero y cola)
+    // 5) Pelado
+    const [pelado] = await conmysql.query(`
+      SELECT p.*, u.usuario_nombre 
+      FROM pelado p
+      LEFT JOIN usuario u ON p.usuario_id = u.usuario_id
+      WHERE p.lote_id = ?
+      ORDER BY p.pelado_id ASC
+    `, [lote_id]);
+
+    // 6) Ingreso a Túnel
+    const [ingreso_tunel] = await conmysql.query(`
+      SELECT it.*, pr.presentacion_descripcion, pe.peso_descripcion 
+      FROM ingresotunel it
+      LEFT JOIN presentacion pr ON it.presentacion_id = pr.presentacion_id
+      LEFT JOIN peso pe ON it.peso_id = pe.peso_id
+      WHERE it.lote_id = ?
+      ORDER BY it.ingresotunel_id ASC
+    `, [lote_id]);
+
+    // 7) Masterizado
+    const [masterizado] = await conmysql.query(`
+      SELECT m.*, c.coche_descripcion, u.usuario_nombre
+      FROM masterizado m
+      LEFT JOIN coche c ON m.coche_id = c.coche_id
+      LEFT JOIN usuario u ON m.usuario_id = u.usuario_id
+      WHERE m.lote_id = ?
+      ORDER BY m.masterizado_id ASC
+    `, [lote_id]);
+
+    // 8) Liquidaciones
     const [liquidaciones] = await conmysql.query(`
       SELECT * FROM liquidacion 
-      WHERE lote_id = ? ORDER BY liquidacion_id ASC
+      WHERE lote_id = ?
+      ORDER BY liquidacion_id ASC
     `, [lote_id]);
 
-    // 8. Masterizado
-    const [masterizado] = await conmysql.query(`
-      SELECT * FROM masterizado 
-      WHERE lote_id = ? ORDER BY masterizado_id ASC
+    const [detalle_liquidacion] = await conmysql.query(`
+      SELECT * FROM liquidacion_detalle 
+      WHERE liquidacion_id IN (
+        SELECT liquidacion_id FROM liquidacion WHERE lote_id = ?
+      )
+      ORDER BY detalle_id ASC
     `, [lote_id]);
 
-    // Unimos todo en un solo objeto
+    // 9) Auditoría
+    const [auditoria] = await conmysql.query(`
+      SELECT a.*, u.usuario_nombre 
+      FROM auditoria a
+      LEFT JOIN usuario u ON a.usuario_id = u.usuario_id
+      WHERE a.auditoria_detalle LIKE ?
+      ORDER BY a.auditoria_id ASC
+    `, [`%Lote ID: ${lote_id}%`]);
+
+    // 10) Historial JSON del lote
+    let historial_json = {};
+    try {
+      historial_json = JSON.parse(lote[0].lote_historial || "{}");
+    } catch (e) {
+      historial_json = {};
+    }
+
     res.json({
-      info_lote: lote[0],
+      lote: lote[0],
       calidad,
+      clasificacion,
       descabezado,
       pelado,
-      clasificacion,
-      ingresosTunel,
+      ingreso_tunel,
+      masterizado,
       liquidaciones,
-      masterizado
+      liquidacion_detalle: detalle_liquidacion,
+      auditoria,
+      historial_json
     });
 
   } catch (error) {
