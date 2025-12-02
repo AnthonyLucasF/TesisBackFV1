@@ -20,13 +20,26 @@ async function buildHistorialLote(lote_id) {
 
   const lote = recepcion[0];
 
-  // 2) CONTROL DE CALIDAD + DEFECTOS COMPLETOS
+  // 2) CONTROL DE CALIDAD + DEFECTOS
   const [calidad] = await conmysql.query(`
   SELECT 
     cc.*,
     u.usuario_nombre,
     col.color_descripcion,
-    d.* AS defectos
+
+    JSON_OBJECT(
+      'defecto1', d.defecto1,
+      'defecto2', d.defecto2,
+      'defecto3', d.defecto3,
+      'defecto4', d.defecto4,
+      'defecto5', d.defecto5,
+      'defecto6', d.defecto6,
+      'defecto7', d.defecto7,
+      'defecto8', d.defecto8,
+      'defecto9', d.defecto9,
+      'defecto10', d.defecto10
+    ) AS defectos
+
   FROM control_calidad cc
   LEFT JOIN usuario u ON u.usuario_id = cc.usuario_id
   LEFT JOIN color col ON col.color_id = cc.color_id
