@@ -36,23 +36,17 @@ export const getLiquidaciones = async (req, res) => {
     else return res.status(400).json({ message: "Tipo no válido" });
 
     const [filas] = await conmysql.query(`
-      SELECT 
-        l.liquidacion_id,
-        l.lote_id,
-        lo.lote_codigo,
-        l.liquidacion_tipo,
-        l.liquidacion_rendimiento,
-        l.liquidacion_basura,
-        l.liquidacion_fecha,
-        IFNULL((
-          SELECT SUM(ld.libras) 
-          FROM liquidacion_detalle ld
-          WHERE ld.liquidacion_id = l.liquidacion_id
-        ),0) AS total_empacado
-      FROM liquidacion l
-      INNER JOIN lote lo ON l.lote_id = lo.lote_id
-      WHERE l.liquidacion_tipo = ?
-      ORDER BY l.liquidacion_id DESC
+      SELECT li.liquidacion_id,
+             li.lote_id,
+             lo.lote_codigo,
+             li.liquidacion_tipo,
+             li.liquidacion_rendimiento,
+             li.liquidacion_basura,
+             li.liquidacion_fecha
+      FROM liquidacion li
+      INNER JOIN lote lo ON lo.lote_id = li.lote_id
+      WHERE li.liquidacion_tipo = ?
+      ORDER BY li.liquidacion_id DESC
     `, [tipoBD]);
 
     return res.json(filas);
@@ -63,7 +57,7 @@ export const getLiquidaciones = async (req, res) => {
 };
 
 //  GET /liquidacion/:id
-export const getLiquidacionxid = async (req, res) => {
+/* export const getLiquidacionxid = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -87,6 +81,43 @@ export const getLiquidacionxid = async (req, res) => {
 
   } catch (err) {
     console.error(err);
+    return res.status(500).json({ message: err.message });
+  }
+}; */
+
+export const getLiquidacionxid = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [cab] = await conmysql.query(`
+      SELECT li.liquidacion_id,
+             li.lote_id,
+             lo.lote_codigo,
+             li.liquidacion_tipo,
+             li.liquidacion_rendimiento,
+             li.liquidacion_basura,
+             li.liquidacion_fecha
+      FROM liquidacion li
+      INNER JOIN lote lo ON lo.lote_id = li.lote_id
+      WHERE li.liquidacion_id = ?
+    `, [id]);
+
+    if (!cab.length)
+      return res.status(404).json({ message: "Liquidación no encontrada" });
+
+    const [det] = await conmysql.query(`
+      SELECT talla, clase, color, corte, peso, presentacion, orden,
+             libras, coches
+      FROM liquidacion_detalle
+      WHERE liquidacion_id = ?
+    `, [id]);
+
+    return res.json({
+      cabecera: cab[0],
+      detalles: det
+    });
+
+  } catch (err) {
     return res.status(500).json({ message: err.message });
   }
 };
