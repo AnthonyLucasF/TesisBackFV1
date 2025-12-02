@@ -208,7 +208,9 @@ export const postLiquidacion = async (req, res) => {
 // src/controladores/liquidacionCtrl.js
 import { conmysql } from "../db.js";
 
+// =========================================================
 //  GET /liquidacion?tipo=entero|cola   (LISTAR LIQUIDACIONES)
+// =========================================================
 export const getLiquidaciones = async (req, res) => {
   try {
     const { tipo } = req.query;
@@ -247,7 +249,9 @@ export const getLiquidaciones = async (req, res) => {
   }
 };
 
+// =========================================================
 //  GET /liquidacion/:id   (DETALLE COMPLETO)
+// =========================================================
 export const getLiquidacionxid = async (req, res) => {
   try {
     const { id } = req.params;
@@ -271,7 +275,7 @@ export const getLiquidacionxid = async (req, res) => {
         pi.piscina_nombre,
         CASE 
           WHEN lo.lote_n_bines > 0 
-          THEN (lo.lote_libras_remitidas / lo.lote_n_bines)
+          THEN lo.lote_libras_remitidas / lo.lote_n_bines 
           ELSE 0 
         END AS peso_promedio
       FROM liquidacion li
@@ -286,7 +290,7 @@ export const getLiquidacionxid = async (req, res) => {
     if (!cab.length)
       return res.status(404).json({ message: "Liquidación no encontrada" });
 
-    // DETALLE (YA TRAE ORDEN)
+    // DETALLE (YA TRAE ORDEN CÓDIGO)
     const [det] = await conmysql.query(
       `
       SELECT 
@@ -308,7 +312,9 @@ export const getLiquidacionxid = async (req, res) => {
   }
 };
 
+// =========================================================
 //  POST /liquidacion   (GENERAR LIQUIDACIÓN)
+// =========================================================
 export const postLiquidacion = async (req, res) => {
   try {
     const { lote_id, tipo } = req.body;
@@ -353,23 +359,21 @@ export const postLiquidacion = async (req, res) => {
              pr.presentacion_descripcion,
              o.orden_codigo
       FROM ingresotunel it
-      LEFT JOIN talla t ON it.talla_id = t.talla_id
-      LEFT JOIN clase c ON it.clase_id = c.clase_id
-      LEFT JOIN color col ON it.color_id = col.color_id
-      LEFT JOIN corte co ON it.corte_id = co.corte_id
-      LEFT JOIN peso p ON it.peso_id = p.peso_id
-      LEFT JOIN glaseo g ON it.glaseo_id = g.glaseo_id
+      LEFT JOIN talla        t  ON it.talla_id        = t.talla_id
+      LEFT JOIN clase        c  ON it.clase_id        = c.clase_id
+      LEFT JOIN color        col ON it.color_id       = col.color_id
+      LEFT JOIN corte        co ON it.corte_id        = co.corte_id
+      LEFT JOIN peso         p  ON it.peso_id         = p.peso_id
+      LEFT JOIN glaseo       g  ON it.glaseo_id       = g.glaseo_id
       LEFT JOIN presentacion pr ON it.presentacion_id = pr.presentacion_id
-      LEFT JOIN orden o ON it.orden_id = o.orden_id
+      LEFT JOIN orden        o  ON it.orden_id        = o.orden_id
       WHERE it.lote_id = ? AND it.tipo_id = ?
     `,
       [lote_id, tipo_id]
     );
 
-    if (!ingresos.length)
-      return res
-        .status(400)
-        .json({ message: "No existen ingresos para este tipo" });
+    if (!inresos.length)
+      return res.status(400).json({ message: "No existen ingresos para este tipo" });
 
     // LEER DATOS DEL LOTE PARA LIBRAS REMITIDAS Y BINES
     const [lotes] = await conmysql.query(
@@ -435,19 +439,17 @@ export const postLiquidacion = async (req, res) => {
       0
     );
 
-    // Sobrante = libras remitidas - empacado - basura (no bajamos de 0)
+    // SOBRANTE = libras remitidas - empacado - basura (no baja de 0)
     let sobrante = 0;
     if (librasRemitidas > 0) {
       sobrante = librasRemitidas - totalLibras - totalBasura;
       if (sobrante < 0) sobrante = 0;
     }
 
-    // Rendimiento:
-    //  rendimiento% = (Total Empacado + Basura) / Libras Remitidas * 100
-    //  => rendimiento% + porcentaje de sobrante% = 100
+    // RENDIMIENTO = empacado / (empacado + basura) * 100
     const rendimiento =
-      librasRemitidas > 0
-        ? ((totalLibras + totalBasura) / librasRemitidas) * 100
+      totalLibras + totalBasura > 0
+        ? (totalLibras / (totalLibras + totalBasura)) * 100
         : 0;
 
     // INSERT CABECERA
@@ -458,14 +460,7 @@ export const postLiquidacion = async (req, res) => {
        liquidacion_total_libras, liquidacion_sobrante)
       VALUES (?, ?, ?, ?, ?, ?)
     `,
-      [
-        lote_id,
-        tipoBD,
-        rendimiento,
-        totalBasura,
-        totalLibras,
-        sobrante,
-      ]
+      [lote_id, tipoBD, rendimiento, totalBasura, totalLibras, sobrante]
     );
 
     const liquidacion_id = liq.insertId;
