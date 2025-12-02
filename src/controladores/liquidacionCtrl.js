@@ -224,7 +224,6 @@ export const deleteLiquidacion = async (req, res) => {
 
 
 
-
 import { conmysql } from "../db.js";
 
 // ------------------------------------------------------------------
@@ -237,26 +236,12 @@ export const generarLiquidacion = async (req, res) => {
     if (!lote_id || !tipo)
       return res.status(400).json({ message: "Datos incompletos" });
 
-    const tipoMap = (tipo === "entero" || tipo === 1) ? "entero" : "cola";
+    // MAPEO CORRECTO
+    const tipoMap = tipo === "entero" ? 1 : 2; // 1 = Entero, 2 = Cola
 
-    // ***********************************************
-    // OBTENER tipo_id REAL DESDE LA BD
-    // ***********************************************
-    const [[tipoRow]] = await conmysql.query(`
-      SELECT tipo_id 
-      FROM tipo 
-      WHERE tipo_descripcion = ?
-      LIMIT 1
-    `, [tipoMap]);
-
-    if (!tipoRow)
-      return res.status(400).json({ message: "Tipo no válido" });
-
-    const tipo_real_id = tipoRow.tipo_id;
-
-    // ***********************************************
-    // BUSCAR INGRESOS USANDO EL tipo REAL
-    // ***********************************************
+    // ----------------------------------------------------------------
+    // 1. BUSCAR INGRESOS POR LOTE Y TIPO
+    // ----------------------------------------------------------------
     const [ingresos] = await conmysql.query(`
       SELECT it.*, 
              t.talla_descripcion,
@@ -277,19 +262,132 @@ export const generarLiquidacion = async (req, res) => {
       LEFT JOIN presentacion pr ON it.presentacion_id = pr.presentacion_id
       LEFT JOIN orden o ON it.orden_id = o.orden_id
       WHERE it.lote_id = ? AND it.tipo_id = ?
-    `, [lote_id, tipo_real_id]);
+    `, [lote_id, tipoMap]);
+
+    if (!ingresos.length)
+      return res.status(400).json({ message: "No existen ingresos de túnel" });
+
+    // ----------------------------------------------------------------
+    // 2. DETECTAR INCONSISTENCIAS (solo peso)
+    // ----------------------------------------------------------------
+    const inconsistencias = {};
+    const mapa = {};
+
+    ingresos.forEach(i => {
+      const clave = `${i.talla_id}-${i.clase_id}-${i.color_id}-${i.corte_id}-${i.presentacion_id}-${i.glaseo_id}-${i.orden_id}`;
+
+      if (!mapa[clave])
+        mapa[clave] = { pesos: new Set(), ingresos: [] };
+
+      mapa[clave].pesos.add(i.peso_id);
+      mapa[clave].ingresos.push(i);
+    });
+
+    Object.keys(mapa).forEach(k => {
+      if (mapa[k].pesos.size > 1) {
+        inconsistencias[k] = "Variación de peso detectada";
+      }
+    });
+
+    // ----------------------------------------------------------------
+    // 3. SI EXISTE LIQUIDACIÓN PREVIA → ELIMINARLA
+    // ----------------------------------------------------------------
+    const [exist] = await conmysql.query(
+      "SELECT liquidacion_id FROM liquidacion WHERE lote_id = ? AND liquidacion_tipo = ?",
+      [lote_id, tipo === "entero" ? "entero" : "cola"]
+    );
+
+    if (exist.length) {
+      const idPrev = exist[0].liquidacion_id;
+      await conmysql.query("DELETE FROM liquidacion_detalle WHERE liquidacion_id = ?", [idPrev]);
+      await conmysql.query("DELETE FROM liquidacion WHERE liquidacion_id = ?", [idPrev]);
+    }
+
+    // ----------------------------------------------------------------
+    // 4. CABECERA LIQUIDACIÓN
+    // ----------------------------------------------------------------
+    const totalLibras = ingresos.reduce((sum, i) => sum + Number(i.ingresotunel_total || 0), 0);
+    const totalBasura = ingresos.reduce((sum, i) => sum + Number(i.ingresotunel_basura || 0), 0);
+
+    const rendimiento = totalLibras + totalBasura > 0
+      ? (totalLibras / (totalLibras + totalBasura)) * 100
+      : 0;
+
+    const [liq] = await conmysql.query(`
+      INSERT INTO liquidacion (lote_id, liquidacion_tipo, liquidacion_rendimiento, liquidacion_basura)
+      VALUES (?, ?, ?, ?)
+    `, [lote_id, tipo, rendimiento, totalBasura]);
+
+    const liquidacion_id = liq.insertId;
+
+    // ----------------------------------------------------------------
+    // 5. DETALLES AGRUPADOS
+    // ----------------------------------------------------------------
+    const detalleMap = {};
+
+    ingresos.forEach(i => {
+      const k = `${i.talla_descripcion}-${i.clase_descripcion}-${i.color_descripcion}-${i.corte_descripcion}-${i.peso_descripcion}-${i.glaseo_descripcion}-${i.presentacion_descripcion}-${i.orden_codigo}`;
+
+      if (!detalleMap[k]) {
+        detalleMap[k] = {
+          talla: i.talla_descripcion,
+          clase: i.clase_descripcion,
+          color: i.color_descripcion,
+          corte: i.corte_descripcion,
+          peso: i.peso_descripcion,
+          glaseo: i.glaseo_descripcion,
+          presentacion: i.presentacion_descripcion,
+          orden: i.orden_codigo,
+          libras: 0,
+          coches: 0
+        };
+      }
+
+      detalleMap[k].libras += Number(i.ingresotunel_total);
+      detalleMap[k].coches++;
+    });
+
+    // ----------------------------------------------------------------
+    // 6. INSERTAR DETALLES
+    // ----------------------------------------------------------------
+    for (const d of Object.values(detalleMap)) {
+      await conmysql.query(`
+        INSERT INTO liquidacion_detalle
+        (liquidacion_id, talla, clase, color, corte, peso, glaseo, presentacion, orden, libras, coches)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        liquidacion_id,
+        d.talla, d.clase, d.color, d.corte,
+        d.peso, d.glaseo, d.presentacion, d.orden,
+        d.libras, d.coches
+      ]);
+    }
+
+    res.json({
+      message: "Liquidación generada correctamente",
+      liquidacion_id,
+      inconsistencias
+    });
+
+  } catch (err) {
+    console.error("ERROR EN liquidación:", err);
+    res.status(500).json({ message: "Error en liquidación", detalle: err.message });
+  }
+};
 
 // ------------------------------------------------------------------
-// 2. LISTAR POR TIPO
+// 2. LISTAR
 // ------------------------------------------------------------------
 export const listarLiquidaciones = async (req, res) => {
   const { tipo } = req.query;
+
   const [rows] = await conmysql.query(`
     SELECT *
     FROM liquidacion
     WHERE liquidacion_tipo = ?
     ORDER BY liquidacion_fecha DESC
   `, [tipo]);
+
   res.json(rows);
 };
 
