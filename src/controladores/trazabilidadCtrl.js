@@ -141,16 +141,26 @@ async function buildHistorialLote(lote_id) {
 
   // 7) MASTERIZADO
   const [masterizado] = await conmysql.query(`
-    SELECT 
-      m.*,
-      u.usuario_nombre,
-      ch.coche_descripcion
-    FROM masterizado m
-    LEFT JOIN usuario u ON u.usuario_id = m.usuario_id
-    LEFT JOIN coche ch ON ch.coche_id = m.coche_id
-    WHERE m.lote_id = ?
-    ORDER BY m.masterizado_fecha ASC
-  `, [lote_id]);
+  SELECT 
+    m.masterizado_id,
+    m.lote_id,
+    m.coche_id,
+    m.usuario_id,
+    m.master_type AS master_tipo,              -- antes usabas master_tipo
+    m.masterizado_total_libras AS master_total_libras,  
+    m.masterizado_total_cajas AS master_total_cajas,
+    m.masterizado_total_master AS master_cantidad,       -- antes usabas master_cantidad
+    m.masterizado_fecha,
+    m.masterizado_observaciones,
+    m.masterizado_estado,
+    u.usuario_nombre,
+    ch.coche_descripcion
+  FROM masterizado m
+  LEFT JOIN usuario u ON u.usuario_id = m.usuario_id
+  LEFT JOIN coche ch ON ch.coche_id = m.coche_id
+  WHERE m.lote_id = ?
+  ORDER BY m.masterizado_fecha ASC
+`, [lote_id]);
 
   // 8) LIQUIDACIONES
   const [liquidaciones] = await conmysql.query(`
