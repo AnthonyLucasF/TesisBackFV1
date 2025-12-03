@@ -1,9 +1,9 @@
+// src/routes/reportes.routes.js
 import { Router } from "express";
-import { getHistorialLotexd } from '../controladores/reportesCtrl.js'
+import { getReporte } from "../controladores/reportesCtrl.js";
 
-const router = Router()
+const router = Router();
 
-//Armar nuestras rutas
-router.get('/clase', getHistorialLotexd) //SELECT
+router.get("/reportes/:tipo", getReporte);
 
-export default router
+export default router;
