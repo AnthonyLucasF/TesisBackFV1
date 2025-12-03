@@ -1,3 +1,4 @@
+// src/controladores/reportesCtrl.js
 import { conmysql } from "../db.js";
 
 export const getReporte = async (req, res) => {
@@ -5,139 +6,156 @@ export const getReporte = async (req, res) => {
     const { tipo } = req.params;
 
     let titulo = "";
-    let data = [];
+    let query = "";
     let kpi = {};
 
-    // 1) RENDIMIENTO
-    if (tipo === "rendimiento") {
-      titulo = "Rendimiento por Proceso";
+    switch (tipo) {
 
-      const [rows] = await conmysql.query(`
-        SELECT 
-          l.lote_codigo AS label,
-          CAST(liq.liquidacion_rendimiento AS DECIMAL(10,2)) AS valor
-        FROM liquidacion liq
-        LEFT JOIN lote l ON l.lote_id = liq.lote_id
-        ORDER BY l.lote_id DESC
-        LIMIT 20
-      `);
+      // 1) PRODUCCIÓN: libras netas por lote (túnel)
+      case "produccion":
+        titulo = "Producción (Libras Netas por Lote)";
 
-      data = rows.map(x => ({
-        label: x.label,
-        valor: parseFloat(x.valor) || 0
-      }));
+        query = `
+          SELECT 
+            l.lote_codigo AS label,
+            SUM(it.ingresotunel_libras_netas) AS valor
+          FROM ingresotunel it
+          LEFT JOIN lote l ON l.lote_id = it.lote_id
+          GROUP BY it.lote_id
+          ORDER BY valor DESC
+        `;
 
-      const total = data.reduce((s,x)=>s+x.valor,0);
+        {
+          const [rowsKpi] = await conmysql.query(`
+            SELECT 
+              COUNT(DISTINCT lote_id) AS lotes,
+              SUM(ingresotunel_libras_netas) AS total_libras,
+              SUM(ingresotunel_n_cajas) AS total_cajas
+            FROM ingresotunel
+          `);
+          kpi = rowsKpi[0] || {};
+        }
+        break;
 
-      kpi = {
-        total,
-        promedio: total / (data.length || 1),
-        mejor: data.sort((a,b)=>b.valor - a.valor)[0]?.label
-      };
+      // 2) PERDIDAS: basura + sobrante en túnel
+      case "perdidas":
+        titulo = "Pérdidas (Basura + Sobrante por Lote)";
+
+        query = `
+          SELECT
+            l.lote_codigo AS label,
+            SUM(it.ingresotunel_basura + it.ingresotunel_sobrante) AS valor
+          FROM ingresotunel it
+          LEFT JOIN lote l ON l.lote_id = it.lote_id
+          GROUP BY it.lote_id
+          ORDER BY valor DESC
+        `;
+
+        {
+          const [rowsKpi] = await conmysql.query(`
+            SELECT 
+              SUM(ingresotunel_basura)   AS basura_total,
+              SUM(ingresotunel_sobrante) AS sobrante_total
+            FROM ingresotunel
+          `);
+          kpi = rowsKpi[0] || {};
+        }
+        break;
+
+      // 3) RENDIMIENTO: rendimiento promedio por lote
+      case "rendimiento":
+        titulo = "Rendimiento Promedio por Lote";
+
+        query = `
+          SELECT 
+            l.lote_codigo AS label,
+            AVG(it.ingresotunel_rendimiento) AS valor
+          FROM ingresotunel it
+          LEFT JOIN lote l ON l.lote_id = it.lote_id
+          GROUP BY it.lote_id
+          ORDER BY valor DESC
+        `;
+
+        {
+          const [rowsKpi] = await conmysql.query(`
+            SELECT 
+              AVG(ingresotunel_rendimiento) AS prom_rendimiento,
+              MIN(ingresotunel_rendimiento) AS min_rendimiento,
+              MAX(ingresotunel_rendimiento) AS max_rendimiento
+            FROM ingresotunel
+            WHERE ingresotunel_rendimiento IS NOT NULL
+          `);
+          kpi = rowsKpi[0] || {};
+        }
+        break;
+
+      // 4) CALIDAD: defectos totales promedio por lote
+      case "calidad":
+        titulo = "Control de Calidad y Defectos por Lote";
+
+        query = `
+          SELECT 
+            l.lote_codigo AS label,
+            AVG(d.defectos_total_defectos) AS valor
+          FROM control_calidad cc
+          LEFT JOIN lote l     ON l.lote_id = cc.lote_id
+          LEFT JOIN defectos d ON d.defectos_id = cc.defectos_id
+          GROUP BY cc.lote_id
+          ORDER BY valor DESC
+        `;
+
+        {
+          const [rowsKpi] = await conmysql.query(`
+            SELECT 
+              AVG(d.defectos_total_defectos) AS prom_total_defectos,
+              MAX(d.defectos_total_defectos) AS max_total_defectos,
+              MIN(d.defectos_total_defectos) AS min_total_defectos
+            FROM control_calidad cc
+            LEFT JOIN defectos d ON d.defectos_id = cc.defectos_id
+          `);
+          kpi = rowsKpi[0] || {};
+        }
+        break;
+
+      // 5) PROVEEDORES: ranking por libras netas ingresadas a túnel
+      case "proveedores":
+        titulo = "Ranking de Proveedores (Libras Netas)";
+
+        query = `
+          SELECT 
+            pr.proveedor_nombre AS label,
+            SUM(it.ingresotunel_libras_netas) AS valor
+          FROM ingresotunel it
+          LEFT JOIN lote l ON l.lote_id = it.lote_id
+          LEFT JOIN proveedor pr ON pr.proveedor_id = l.proveedor_id
+          GROUP BY pr.proveedor_id
+          ORDER BY valor DESC
+        `;
+
+        {
+          const [rowsKpi] = await conmysql.query(`
+            SELECT 
+              COUNT(DISTINCT pr.proveedor_id) AS total_proveedores,
+              SUM(it.ingresotunel_libras_netas) AS total_libras
+            FROM ingresotunel it
+            LEFT JOIN lote l ON l.lote_id = it.lote_id
+            LEFT JOIN proveedor pr ON pr.proveedor_id = l.proveedor_id
+          `);
+          kpi = rowsKpi[0] || {};
+        }
+        break;
+
+      default:
+        return res.status(400).json({ message: "Tipo de reporte inválido" });
     }
 
+    const [rows] = await conmysql.query(query);
 
-    // 2) PERDIDAS
-    if (tipo === "perdidas") {
-      titulo = "Pérdidas por Lote";
-
-      const [rows] = await conmysql.query(`
-        SELECT 
-          l.lote_codigo AS label,
-          CAST(liq.liquidacion_basura + liq.liquidacion_sobrante AS DECIMAL(10,2)) AS valor
-        FROM liquidacion liq
-        LEFT JOIN lote l ON l.lote_id = liq.lote_id
-      `);
-
-      data = rows.map(x => ({
-        label: x.label,
-        valor: parseFloat(x.valor) || 0
-      }));
-
-      const total = data.reduce((s,x)=>s+x.valor,0);
-
-      kpi = {
-        total,
-        promedio: total/(data.length||1)
-      };
-    }
-
-
-    // 3) PRODUCCION
-    if (tipo === "produccion") {
-      titulo = "Producción de Cajas por Lote";
-
-      const [rows] = await conmysql.query(`
-        SELECT 
-          l.lote_codigo AS label,
-          SUM(it.ingresotunel_n_cajas) AS valor
-        FROM ingresotunel it
-        LEFT JOIN lote l ON l.lote_id = it.lote_id
-        GROUP BY it.lote_id
-      `);
-
-      data = rows.map(x => ({
-        label: x.label,
-        valor: parseFloat(x.valor) || 0
-      }));
-
-      kpi = {
-        total: data.reduce((s,x)=>s+x.valor,0)
-      };
-    }
-
-
-    // 4) CALIDAD
-    if (tipo === "calidad") {
-      titulo = "Defectos por Lote";
-
-      const [rows] = await conmysql.query(`
-        SELECT 
-          l.lote_codigo AS label,
-          CAST(d.defectos_total_defectos AS DECIMAL(10,2)) AS valor
-        FROM control_calidad cc
-        LEFT JOIN lote l ON l.lote_id = cc.lote_id
-        LEFT JOIN defectos d ON d.defectos_id = cc.defectos_id
-      `);
-
-      data = rows.map(x => ({
-        label: x.label,
-        valor: parseFloat(x.valor) || 0
-      }));
-
-      kpi = {
-        total: data.reduce((s,x)=>s+x.valor,0)
-      };
-    }
-
-
-    // 5) PROVEEDORES
-    if (tipo === "proveedores") {
-      titulo = "Ranking de Proveedores";
-
-      const [rows] = await conmysql.query(`
-        SELECT 
-          pr.proveedor_nombre AS label,
-          SUM(l.lote_libras_remitidas) AS valor
-        FROM lote l
-        LEFT JOIN proveedor pr ON pr.proveedor_id = l.proveedor_id
-        GROUP BY pr.proveedor_id
-        ORDER BY valor DESC
-      `);
-
-      data = rows.map(x => ({
-        label: x.label,
-        valor: parseFloat(x.valor) || 0
-      }));
-
-      kpi = {
-        total: data.reduce((s,x)=>s+x.valor,0),
-        mejor: data[0]?.label
-      };
-    }
-
-    // RESPUESTA FINAL
-    return res.json({ titulo, data, kpi });
+    res.json({
+      titulo,
+      kpi,
+      data: rows
+    });
 
   } catch (err) {
     console.error("Error Reportes:", err);
