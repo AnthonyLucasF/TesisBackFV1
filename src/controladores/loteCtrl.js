@@ -145,7 +145,7 @@ export const postLote = async (req, res) => {
 };
 
 // UPDATE completo
-export const putLote = async (req, res) => {
+/* export const putLote = async (req, res) => {
     try {
         const { id } = req.params;
         const {
@@ -171,6 +171,110 @@ export const putLote = async (req, res) => {
         if (result.affectedRows <= 0) return res.status(404).json({ message: "Lote no encontrado" });
 
         const [rows] = await conmysql.query('SELECT * FROM lote WHERE lote_id=?', [id]);
+
+        // 🔁 Emitir evento WebSocket
+        global._io.emit("lote_actualizado", rows[0]);
+
+        res.json(rows[0]);
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+}; */
+
+export const putLote = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        let {
+            tipo_id, vehiculo_id, chofer_id, lote_codigo, lote_fecha_ingreso, lote_hora_ingreso,
+            proveedor_id, lote_libras_remitidas, lote_peso_promedio, lote_n_piscina, lote_n_bines,
+            lote_n_gavetas_conicas, lote_n_gavetas_caladas, lote_n_sacos_hielo, lote_n_sacos_metasulfito,
+            lote_n_sacos_sal, lote_observaciones, usuario_id
+        } = req.body;
+
+        // 🔹 Normalizar valores que llegan vacíos desde Ionic
+        const toNullInt = (v) =>
+            v === '' || v === undefined || v === null ? null : Number(v);
+
+        tipo_id = toNullInt(tipo_id);
+        chofer_id = toNullInt(chofer_id);
+        vehiculo_id = toNullInt(vehiculo_id);
+        proveedor_id = toNullInt(proveedor_id);
+        usuario_id = toNullInt(usuario_id);
+
+        // 🔹 Si hay chofer, el vehículo se deriva SIEMPRE desde BD
+        if (chofer_id) {
+            const [ch] = await conmysql.query(
+                'SELECT vehiculo_id FROM chofer WHERE chofer_id = ?',
+                [chofer_id]
+            );
+
+            if (ch.length === 0) {
+                return res.status(400).json({ message: "Chofer no existe" });
+            }
+
+            vehiculo_id = ch[0].vehiculo_id;
+
+            if (!vehiculo_id) {
+                return res.status(400).json({
+                    message: "El chofer seleccionado no tiene vehículo asignado"
+                });
+            }
+        }
+
+        // 🔹 UPDATE
+        const [result] = await conmysql.query(
+            `UPDATE lote SET
+        tipo_id=?,
+        vehiculo_id=?,
+        chofer_id=?,
+        lote_codigo=?,
+        lote_fecha_ingreso=?,
+        lote_hora_ingreso=?,
+        proveedor_id=?,
+        lote_libras_remitidas=?,
+        lote_peso_promedio=?,
+        lote_n_piscina=?,
+        lote_n_bines=?,
+        lote_n_gavetas_conicas=?,
+        lote_n_gavetas_caladas=?,
+        lote_n_sacos_hielo=?,
+        lote_n_sacos_metasulfito=?,
+        lote_n_sacos_sal=?,
+        lote_observaciones=?,
+        usuario_id=?
+      WHERE lote_id=?`,
+            [
+                tipo_id,
+                vehiculo_id,
+                chofer_id,
+                lote_codigo,
+                lote_fecha_ingreso,
+                lote_hora_ingreso,
+                proveedor_id,
+                lote_libras_remitidas,
+                lote_peso_promedio,
+                lote_n_piscina,
+                lote_n_bines,
+                lote_n_gavetas_conicas,
+                lote_n_gavetas_caladas,
+                lote_n_sacos_hielo,
+                lote_n_sacos_metasulfito,
+                lote_n_sacos_sal,
+                lote_observaciones,
+                usuario_id,
+                id
+            ]
+        );
+
+        if (result.affectedRows <= 0) {
+            return res.status(404).json({ message: "Lote no encontrado" });
+        }
+
+        const [rows] = await conmysql.query(
+            'SELECT * FROM lote WHERE lote_id = ?',
+            [id]
+        );
 
         // 🔁 Emitir evento WebSocket
         global._io.emit("lote_actualizado", rows[0]);
