@@ -145,7 +145,7 @@ export const postLote = async (req, res) => {
 };
 
 // UPDATE completo
-e/* xport const putLote = async (req, res) => {
+/* export const putLote = async (req, res) => {
     try {
         const { id } = req.params;
         const {
