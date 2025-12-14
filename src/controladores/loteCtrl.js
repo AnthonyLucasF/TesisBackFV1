@@ -38,7 +38,7 @@ export const getLotexid = async (req, res) => {
 };
 
 // INSERT: Crear nuevo lote
-export const postLote = async (req, res) => {
+/* export const postLote = async (req, res) => {
 
     try {
         const {
@@ -74,6 +74,71 @@ export const postLote = async (req, res) => {
             id: rows.insertId,
             message: "Lote registrado con éxito"
         });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+}; */
+
+export const postLote = async (req, res) => {
+    try {
+        let {
+            tipo_id, vehiculo_id, chofer_id, lote_codigo, lote_fecha_ingreso, lote_hora_ingreso,
+            proveedor_id, lote_libras_remitidas, lote_peso_promedio, lote_n_piscina, lote_n_bines,
+            lote_n_gavetas_conicas, lote_n_gavetas_caladas, lote_n_sacos_hielo, lote_n_sacos_metasulfito,
+            lote_n_sacos_sal, lote_observaciones, usuario_id
+        } = req.body;
+
+        // Normaliza vacíos que suelen venir de Ionic ("")
+        const toNullInt = (v) => (v === '' || v === undefined || v === null ? null : Number(v));
+        tipo_id = toNullInt(tipo_id);
+        chofer_id = toNullInt(chofer_id);
+        vehiculo_id = toNullInt(vehiculo_id);
+        proveedor_id = toNullInt(proveedor_id);
+        usuario_id = toNullInt(usuario_id);
+
+        if (!lote_codigo || !lote_fecha_ingreso || !usuario_id) {
+            return res.status(400).json({ message: "Campos obligatorios faltantes" });
+        }
+
+        // Si el chofer está seleccionado, el vehículo se obtiene desde la BD
+        if (chofer_id && !vehiculo_id) {
+            const [ch] = await conmysql.query(
+                'SELECT vehiculo_id FROM chofer WHERE chofer_id = ?',
+                [chofer_id]
+            );
+            if (ch.length === 0) return res.status(400).json({ message: "Chofer no existe" });
+            vehiculo_id = ch[0].vehiculo_id;
+            if (!vehiculo_id) return res.status(400).json({ message: "Chofer no tiene vehículo asignado" });
+        }
+
+        // Si te mandan vehiculo_id, valida que coincida con el chofer
+        if (chofer_id && vehiculo_id) {
+            const [ok] = await conmysql.query(
+                'SELECT 1 FROM chofer WHERE chofer_id = ? AND vehiculo_id = ?',
+                [chofer_id, vehiculo_id]
+            );
+            if (ok.length === 0) {
+                return res.status(400).json({ message: "El vehículo no corresponde al chofer seleccionado" });
+            }
+        }
+
+        const [rows] = await conmysql.query(
+            `INSERT INTO lote
+       (tipo_id, vehiculo_id, chofer_id, lote_codigo, lote_fecha_ingreso, lote_hora_ingreso,
+        proveedor_id, lote_libras_remitidas, lote_peso_promedio, lote_n_piscina, lote_n_bines,
+        lote_n_gavetas_conicas, lote_n_gavetas_caladas, lote_n_sacos_hielo, lote_n_sacos_metasulfito,
+        lote_n_sacos_sal, lote_observaciones, usuario_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [tipo_id, vehiculo_id, chofer_id, lote_codigo, lote_fecha_ingreso, lote_hora_ingreso,
+                proveedor_id, lote_libras_remitidas, lote_peso_promedio, lote_n_piscina, lote_n_bines,
+                lote_n_gavetas_conicas, lote_n_gavetas_caladas, lote_n_sacos_hielo, lote_n_sacos_metasulfito,
+                lote_n_sacos_sal, lote_observaciones, usuario_id]
+        );
+
+        const nuevoLote = { lote_id: rows.insertId, ...req.body, vehiculo_id };
+        global._io.emit("nuevo_lote", nuevoLote);
+
+        res.json({ id: rows.insertId, message: "Lote registrado con éxito" });
     } catch (error) {
         return res.status(500).json({ message: error.message });
     }
