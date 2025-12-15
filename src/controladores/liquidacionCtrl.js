@@ -338,7 +338,6 @@ export const getLiquidaciones = async (req, res) => {
         li.liquidacion_tipo,
         li.liquidacion_fecha,
 
-        -- ✅ Totales por reglas nuevas (EMPRESA)
         COALESCE(SUM(it.ingresotunel_subtotales),0) AS total_empacado,
         COALESCE(SUM(it.ingresotunel_sobrante),0)   AS total_sobrante,
         COALESCE(SUM(it.ingresotunel_basura),0)     AS total_basura,
@@ -353,14 +352,14 @@ export const getLiquidaciones = async (req, res) => {
         COALESCE(SUM(it.ingresotunel_n_cajas),0) AS total_cajas,
         COUNT(DISTINCT it.coche_id) AS total_coches,
 
-        -- ✅ BASE LOTE (prioriza remitidas; fallback: promedio*bines)
+        -- ✅ BASE LOTE
         CASE 
           WHEN COALESCE(lo.lote_libras_remitidas,0) > 0 
             THEN COALESCE(lo.lote_libras_remitidas,0)
           ELSE COALESCE(lo.lote_peso_promedio,0) * COALESCE(lo.lote_n_bines,0)
         END AS base_lote,
 
-        -- ✅ RENDIMIENTO CALCULADO (EMPRESA): empacado/base_lote * 100
+        -- ✅ RENDIMIENTO (EMPRESA): empacado/base_lote * 100
         CASE 
           WHEN (
             CASE 
@@ -428,7 +427,6 @@ export const getLiquidacionxid = async (req, res) => {
         lo.lote_peso_promedio AS peso_promedio,
         pr.proveedor_nombre,
 
-        -- ✅ Totales (EMPRESA)
         COALESCE(SUM(it.ingresotunel_subtotales),0) AS total_empacado,
         COALESCE(SUM(it.ingresotunel_sobrante),0)   AS total_sobrante,
         COALESCE(SUM(it.ingresotunel_basura),0)     AS total_basura,
@@ -450,7 +448,7 @@ export const getLiquidacionxid = async (req, res) => {
           ELSE COALESCE(lo.lote_peso_promedio,0) * COALESCE(lo.lote_n_bines,0)
         END AS base_lote,
 
-        -- ✅ RENDIMIENTO CALCULADO (EMPRESA)
+        -- ✅ RENDIMIENTO (EMPRESA)
         CASE 
           WHEN (
             CASE 
@@ -475,6 +473,7 @@ export const getLiquidacionxid = async (req, res) => {
       FROM liquidacion li
       INNER JOIN lote lo     ON lo.lote_id = li.lote_id
       LEFT JOIN proveedor pr ON pr.proveedor_id = lo.proveedor_id
+
       LEFT JOIN ingresotunel it 
         ON it.lote_id = li.lote_id
        AND it.tipo_id = CASE 
@@ -482,6 +481,7 @@ export const getLiquidacionxid = async (req, res) => {
           WHEN li.liquidacion_tipo = 'Camarón Cola'  THEN 2
           ELSE 0
         END
+
       WHERE li.liquidacion_id = ?
       GROUP BY 
         li.liquidacion_id, li.lote_id, lo.lote_codigo, li.liquidacion_tipo,
