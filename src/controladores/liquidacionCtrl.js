@@ -316,8 +316,8 @@ const num = (v) => {
 
 /* ================================================================
    GET /liquidacion?tipo=entero|cola
-   ✅ Totales calculados desde INGRESOTUNEL (reglas nuevas)
-   ✅ Rendimiento calculado IGUAL QUE INGRESO (SUM(total) / peso_promedio * 100)
+   ✅ Totales desde INGRESOTUNEL
+   ✅ Rendimiento recalculado (EMPRESA)
 ================================================================ */
 export const getLiquidaciones = async (req, res) => {
   try {
@@ -334,11 +334,11 @@ export const getLiquidaciones = async (req, res) => {
         lo.lote_libras_remitidas,
         lo.lote_peso_promedio,
         lo.lote_n_bines,
+        lo.lote_n_piscina,
         li.liquidacion_tipo,
-        li.liquidacion_rendimiento,
         li.liquidacion_fecha,
 
-        -- ✅ Reglas nuevas: calcular desde ingresotunel
+        -- ✅ Totales por reglas nuevas (EMPRESA)
         COALESCE(SUM(it.ingresotunel_subtotales),0) AS total_empacado,
         COALESCE(SUM(it.ingresotunel_sobrante),0)   AS total_sobrante,
         COALESCE(SUM(it.ingresotunel_basura),0)     AS total_basura,
@@ -353,11 +353,34 @@ export const getLiquidaciones = async (req, res) => {
         COALESCE(SUM(it.ingresotunel_n_cajas),0) AS total_cajas,
         COUNT(DISTINCT it.coche_id) AS total_coches,
 
-        -- ✅ Rendimiento calculado (misma lógica de Ingreso)
-        IF(lo.lote_peso_promedio > 0,
-          (COALESCE(SUM(it.ingresotunel_total),0) / lo.lote_peso_promedio) * 100,
-          0
-        ) AS rendimiento_calculado
+        -- ✅ BASE LOTE (prioriza remitidas; fallback: promedio*bines)
+        CASE 
+          WHEN COALESCE(lo.lote_libras_remitidas,0) > 0 
+            THEN COALESCE(lo.lote_libras_remitidas,0)
+          ELSE COALESCE(lo.lote_peso_promedio,0) * COALESCE(lo.lote_n_bines,0)
+        END AS base_lote,
+
+        -- ✅ RENDIMIENTO CALCULADO (EMPRESA): empacado/base_lote * 100
+        CASE 
+          WHEN (
+            CASE 
+              WHEN COALESCE(lo.lote_libras_remitidas,0) > 0 
+                THEN COALESCE(lo.lote_libras_remitidas,0)
+              ELSE COALESCE(lo.lote_peso_promedio,0) * COALESCE(lo.lote_n_bines,0)
+            END
+          ) > 0
+          THEN (
+            COALESCE(SUM(it.ingresotunel_subtotales),0) /
+            (
+              CASE 
+                WHEN COALESCE(lo.lote_libras_remitidas,0) > 0 
+                  THEN COALESCE(lo.lote_libras_remitidas,0)
+                ELSE COALESCE(lo.lote_peso_promedio,0) * COALESCE(lo.lote_n_bines,0)
+              END
+            )
+          ) * 100
+          ELSE 0
+        END AS rendimiento_calculado
 
       FROM liquidacion li
       INNER JOIN lote lo ON lo.lote_id = li.lote_id
@@ -365,9 +388,10 @@ export const getLiquidaciones = async (req, res) => {
         ON it.lote_id = li.lote_id
        AND it.tipo_id = ?
       WHERE li.liquidacion_tipo = ?
-      GROUP BY li.liquidacion_id, li.lote_id, lo.lote_codigo, lo.lote_libras_remitidas,
-               lo.lote_peso_promedio, lo.lote_n_bines, li.liquidacion_tipo,
-               li.liquidacion_rendimiento, li.liquidacion_fecha
+      GROUP BY 
+        li.liquidacion_id, li.lote_id, lo.lote_codigo, lo.lote_libras_remitidas,
+        lo.lote_peso_promedio, lo.lote_n_bines, lo.lote_n_piscina,
+        li.liquidacion_tipo, li.liquidacion_fecha
       ORDER BY li.liquidacion_id DESC
       `,
       [map.tipoId, map.tipoBD]
@@ -382,8 +406,8 @@ export const getLiquidaciones = async (req, res) => {
 
 /* ================================================================
    GET /liquidacion/:id
-   ✅ Cabecera también con reglas nuevas desde ingresotunel
-   ✅ Rendimiento calculado IGUAL QUE INGRESO
+   ✅ Cabecera con reglas nuevas desde ingresotunel
+   ✅ Rendimiento_calculado incluido (EMPRESA)
 ================================================================ */
 export const getLiquidacionxid = async (req, res) => {
   try {
@@ -396,16 +420,15 @@ export const getLiquidacionxid = async (req, res) => {
         li.lote_id,
         lo.lote_codigo,
         li.liquidacion_tipo,
-        li.liquidacion_rendimiento,
         li.liquidacion_fecha,
 
         lo.lote_libras_remitidas,
         lo.lote_n_bines,
-        pr.proveedor_nombre,
         lo.lote_n_piscina,
         lo.lote_peso_promedio AS peso_promedio,
+        pr.proveedor_nombre,
 
-        -- ✅ Totales por reglas nuevas
+        -- ✅ Totales (EMPRESA)
         COALESCE(SUM(it.ingresotunel_subtotales),0) AS total_empacado,
         COALESCE(SUM(it.ingresotunel_sobrante),0)   AS total_sobrante,
         COALESCE(SUM(it.ingresotunel_basura),0)     AS total_basura,
@@ -420,16 +443,38 @@ export const getLiquidacionxid = async (req, res) => {
         COALESCE(SUM(it.ingresotunel_n_cajas),0) AS total_cajas,
         COUNT(DISTINCT it.coche_id) AS total_coches,
 
-        -- ✅ Rendimiento calculado (MISMA fórmula de ingreso: SUM(total) / peso_promedio * 100)
-        IF(lo.lote_peso_promedio > 0,
-          (COALESCE(SUM(it.ingresotunel_total),0) / lo.lote_peso_promedio) * 100,
-          0
-        ) AS rendimiento_calculado
+        -- ✅ BASE LOTE
+        CASE 
+          WHEN COALESCE(lo.lote_libras_remitidas,0) > 0 
+            THEN COALESCE(lo.lote_libras_remitidas,0)
+          ELSE COALESCE(lo.lote_peso_promedio,0) * COALESCE(lo.lote_n_bines,0)
+        END AS base_lote,
+
+        -- ✅ RENDIMIENTO CALCULADO (EMPRESA)
+        CASE 
+          WHEN (
+            CASE 
+              WHEN COALESCE(lo.lote_libras_remitidas,0) > 0 
+                THEN COALESCE(lo.lote_libras_remitidas,0)
+              ELSE COALESCE(lo.lote_peso_promedio,0) * COALESCE(lo.lote_n_bines,0)
+            END
+          ) > 0
+          THEN (
+            COALESCE(SUM(it.ingresotunel_subtotales),0) /
+            (
+              CASE 
+                WHEN COALESCE(lo.lote_libras_remitidas,0) > 0 
+                  THEN COALESCE(lo.lote_libras_remitidas,0)
+                ELSE COALESCE(lo.lote_peso_promedio,0) * COALESCE(lo.lote_n_bines,0)
+              END
+            )
+          ) * 100
+          ELSE 0
+        END AS rendimiento_calculado
 
       FROM liquidacion li
       INNER JOIN lote lo     ON lo.lote_id = li.lote_id
       LEFT JOIN proveedor pr ON pr.proveedor_id = lo.proveedor_id
-
       LEFT JOIN ingresotunel it 
         ON it.lote_id = li.lote_id
        AND it.tipo_id = CASE 
@@ -437,11 +482,11 @@ export const getLiquidacionxid = async (req, res) => {
           WHEN li.liquidacion_tipo = 'Camarón Cola'  THEN 2
           ELSE 0
         END
-
       WHERE li.liquidacion_id = ?
-      GROUP BY li.liquidacion_id, li.lote_id, lo.lote_codigo, li.liquidacion_tipo,
-               li.liquidacion_rendimiento, li.liquidacion_fecha, lo.lote_libras_remitidas,
-               lo.lote_n_bines, pr.proveedor_nombre, lo.lote_n_piscina, lo.lote_peso_promedio
+      GROUP BY 
+        li.liquidacion_id, li.lote_id, lo.lote_codigo, li.liquidacion_tipo,
+        li.liquidacion_fecha, lo.lote_libras_remitidas, lo.lote_n_bines,
+        lo.lote_n_piscina, lo.lote_peso_promedio, pr.proveedor_nombre
       `,
       [id]
     );
@@ -463,15 +508,15 @@ export const getLiquidacionxid = async (req, res) => {
 
     res.json({ cabecera: cab[0], detalles: det });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: err.message });
   }
 };
 
 /* ================================================================
    POST /liquidacion
-   ✅ Totales nuevos desde ingresotunel
-   ✅ Rendimiento replicado EXACTO del Ingreso (getRendimientoLote):
-      rendimiento = SUM(ingresotunel_total) / lote_peso_promedio * 100
+   ✅ Genera liquidación guardando EMPACADO=Σsubtotales
+   ✅ Rendimiento EMPRESA: empacado/base_lote*100
 ================================================================ */
 export const postLiquidacion = async (req, res) => {
   try {
@@ -485,16 +530,23 @@ export const postLiquidacion = async (req, res) => {
       [map.tipoId, lote_id]
     );
 
-    // Lote (para rendimiento basado en la lógica de Ingreso)
+    // Lote (base para rendimiento)
     const [[lot]] = await conmysql.query(
-      `SELECT lote_peso_promedio, parent_lote_id FROM lote WHERE lote_id = ?`,
+      `SELECT lote_peso_promedio, lote_libras_remitidas, lote_n_bines, parent_lote_id
+       FROM lote
+       WHERE lote_id = ?`,
       [lote_id]
     );
 
-    const pesoPromedio = num(lot?.lote_peso_promedio); // ✅ MISMA base que getRendimientoLote
+    const pesoPromedio = num(lot?.lote_peso_promedio);
+    const librasRemitidas = num(lot?.lote_libras_remitidas);
+    const nBines = num(lot?.lote_n_bines);
     const parentLoteId = num(lot?.parent_lote_id);
 
-    // Cargar ingresos del lote y tipo (con textos finales de orden para detalle)
+    // ✅ BASE LOTE (prioriza remitidas; fallback promedio*bines)
+    const baseLote = librasRemitidas > 0 ? librasRemitidas : (pesoPromedio * nBines);
+
+    // Cargar ingresos del lote y tipo
     const [ing] = await conmysql.query(
       `
       SELECT it.*,
@@ -525,30 +577,36 @@ export const postLiquidacion = async (req, res) => {
 
     if (!ing.length) return res.status(400).json({ message: "No ingresos para este tipo" });
 
-    // ✅ Reglas nuevas (Liquidación)
+    // ✅ Totales (EMPRESA)
     const totalEmpacado = ing.reduce((s, x) => s + num(x.ingresotunel_subtotales), 0);
     const totalSobrante = ing.reduce((s, x) => s + num(x.ingresotunel_sobrante), 0);
     const totalBasura = ing.reduce((s, x) => s + num(x.ingresotunel_basura), 0);
     const totalClasificado = 0;
     const totalProcesado = totalEmpacado + totalSobrante + totalClasificado + totalBasura;
 
-    // ✅ Rendimiento replicado EXACTO de Ingreso:
-    // Ingreso usa SUM(ingresotunel_total) / lote_peso_promedio * 100
-    const sumTotalIngreso = ing.reduce((s, x) => s + num(x.ingresotunel_total), 0);
+    // ✅ Rendimiento (EMPRESA)
+    // Entero: empacado / baseLote
+    // Cola: puedes mantener tu lógica especial si aplica (parentBasura etc.)
+    let rendimiento = 0;
 
-    // Nota: dejo tu cálculo de parentBasura por si lo ocupas luego,
-    // pero NO lo uso porque Ingreso NO lo usa en getRendimientoLote.
-    let parentBasura = 0;
-    if (map.tipoId === 2 && parentLoteId > 0) {
-      const [pIng] = await conmysql.query(
-        `SELECT COALESCE(SUM(ingresotunel_basura),0) AS bas FROM ingresotunel WHERE lote_id = ?`,
-        [parentLoteId]
-      );
-      parentBasura = num(pIng?.[0]?.bas);
+    if (map.tipoId === 1) {
+      rendimiento = baseLote > 0 ? (totalEmpacado / baseLote) * 100 : 0;
+    } else {
+      // Si COLA usa tu fórmula especial:
+      let parentBasura = 0;
+      if (parentLoteId > 0) {
+        const [pIng] = await conmysql.query(
+          `SELECT COALESCE(SUM(ingresotunel_basura),0) AS bas 
+           FROM ingresotunel 
+           WHERE lote_id = ?`,
+          [parentLoteId]
+        );
+        parentBasura = num(pIng?.[0]?.bas);
+      }
+
+      const base = baseLote - parentBasura - totalBasura;
+      rendimiento = base > 0 ? (totalEmpacado / base) * 100 : 0;
     }
-
-    const rendimiento =
-      pesoPromedio > 0 ? (sumTotalIngreso / pesoPromedio) * 100 : 0;
 
     // Eliminar liquidación previa (si existe)
     const [old] = await conmysql.query(
@@ -606,6 +664,7 @@ export const postLiquidacion = async (req, res) => {
 
     const totalCajas = detallesArr.reduce((s, d) => s + num(d.cajas), 0);
 
+    // coches GLOBAL: DISTINCT en todos los ingresos del lote+tipo
     const cochesSet = new Set();
     ing.forEach(i => {
       const cocheId = num(i.coche_id);
@@ -613,7 +672,7 @@ export const postLiquidacion = async (req, res) => {
     });
     const totalCoches = cochesSet.size;
 
-    // Insert cabecera (guardas empacado en liquidacion_total_libras como ya lo haces)
+    // Insert cabecera (guardamos rendimiento ya redondeado)
     const [ins] = await conmysql.query(
       `
       INSERT INTO liquidacion
@@ -662,11 +721,8 @@ export const postLiquidacion = async (req, res) => {
       total_procesado: totalProcesado,
       total_cajas: totalCajas,
       total_coches: totalCoches,
-      // rendimiento coherente con Ingreso
-      rendimiento: Number(rendimiento.toFixed(2)),
-      // útil para depurar
-      sum_total_ingreso: Number(sumTotalIngreso.toFixed(2)),
-      peso_promedio_base: Number(pesoPromedio.toFixed(2))
+      base_lote: baseLote,
+      rendimiento: Number(rendimiento.toFixed(2))
     });
 
   } catch (err) {
