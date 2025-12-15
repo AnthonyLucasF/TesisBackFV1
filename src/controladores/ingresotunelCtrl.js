@@ -12,9 +12,9 @@ export const getIngresoTunel = async (req, res) => {
 
 // SELECT por lote_id (para resumen entero/cola)
 export const getIngresoTunelPorLote = async (req, res) => {
-  try {
-    const { lote_id } = req.params;
-    const [result] = await conmysql.query(`
+    try {
+        const { lote_id } = req.params;
+        const [result] = await conmysql.query(`
       SELECT 
         i.*,
         t.tipo_descripcion,
@@ -36,10 +36,10 @@ export const getIngresoTunelPorLote = async (req, res) => {
       WHERE i.lote_id = ?
       ORDER BY i.ingresotunel_fecha DESC
     `, [lote_id]);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
 // GET por ID con JOINs para descripciones
@@ -233,50 +233,164 @@ export const postIngresoTunel = async (req, res) => {
     }
 };
 
-// ... (el resto del archivo queda igual)
-
 // PUT: Update completo, recalcular pendientes orden, emitir WS
 export const putIngresoTunel = async (req, res) => {
+    const { id } = req.params;
+
+    const cleanNumber = (val) => {
+        if (val === null || val === undefined || val === '') return 0;
+        const num = parseFloat(String(val).replace(/[^\d.,-]/g, '').replace(',', '.'));
+        return isNaN(num) ? 0 : num;
+    };
+
+    const conn = await conmysql.getConnection(); // IMPORTANTE: tu pool debe soportar getConnection()
     try {
-        const { id } = req.params;
-        const {
-            lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id, peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id, c_calidad_id, defectos_id, ingresotunel_fecha, ingresotunel_peso_neto, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento, ingresotunel_observaciones
-        } = req.body;
+        await conn.beginTransaction();
 
-        // Fetch anterior para ajustar pendientes
-        const [anterior] = await conmysql.query('SELECT orden_id, ingresotunel_total FROM ingresotunel WHERE ingresotunel_id = ?', [id]);
-        const anteriorOrden = anterior[0].orden_id;
-        const anteriorTotal = anterior[0].ingresotunel_total;
-
-        const [result] = await conmysql.query(
-            'UPDATE ingresotunel SET lote_id=?, usuario_id=?, proveedor_id=?, tipo_id=?, clase_id=?, color_id=?, corte_id=?, talla_id=?, peso_id=?, glaseo_id=?, presentacion_id=?, orden_id=?, maquina_id=?, grupo_id=?, coche_id=?, c_calidad_id=?, defectos_id=?, ingresotunel_fecha=?, ingresotunel_peso_neto=?, ingresotunel_n_cajas=?, ingresotunel_libras_netas=?, ingresotunel_subtotales=?, ingresotunel_total=?, ingresotunel_sobrante=?, ingresotunel_basura=?, ingresotunel_rendimiento=?, ingresotunel_observaciones=? WHERE ingresotunel_id=?',
-            [lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id, peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id, c_calidad_id, defectos_id, ingresotunel_fecha, ingresotunel_peso_neto, ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales, ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura, ingresotunel_rendimiento, ingresotunel_observaciones, id]
+        // 1) Traer registro anterior (obligatorio para recalcular orden)
+        const [prevRows] = await conn.query(
+            `SELECT orden_id, ingresotunel_total 
+       FROM ingresotunel 
+       WHERE ingresotunel_id = ?`,
+            [id]
         );
 
-        if (result.affectedRows <= 0) return res.status(404).json({ message: "Ingreso no encontrado" });
-
-        // Ajustar pendientes orden
-        if (anteriorOrden > 0) {
-            await conmysql.query('UPDATE orden SET orden_libras_pendientes = orden_libras_pendientes + ? WHERE orden_id = ?', [anteriorTotal, anteriorOrden]);
+        if (!prevRows || prevRows.length === 0) {
+            await conn.rollback();
+            return res.status(404).json({ message: "Ingreso no encontrado" });
         }
-        if (orden_id > 0) {
-            await conmysql.query('UPDATE orden SET orden_libras_pendientes = orden_libras_pendientes - ? WHERE orden_id = ?', [ingresotunel_total, orden_id]);
-            // Check cumplida
-            const [orden] = await conmysql.query('SELECT orden_libras_pendientes FROM orden WHERE orden_id = ?', [orden_id]);
-            if (orden[0].orden_libras_pendientes <= 0) {
-                await conmysql.query('UPDATE orden SET orden_estado = "cumplida" WHERE orden_id = ?', [orden_id]);
-                global._io.emit("orden_cumplida", { orden_id });
+
+        const anteriorOrdenId = Number(prevRows[0].orden_id || 0);
+        const anteriorTotal = cleanNumber(prevRows[0].ingresotunel_total);
+
+        // 2) Normalizar body (evita undefined => NULL accidental)
+        const b = req.body || {};
+
+        const data = {
+            lote_id: b.lote_id,
+            usuario_id: b.usuario_id || 1,
+            proveedor_id: b.proveedor_id || 0,
+            tipo_id: b.tipo_id,
+            clase_id: b.clase_id || 0,
+            color_id: b.color_id || 0,
+            corte_id: b.corte_id || 0,
+            talla_id: b.talla_id,
+            peso_id: b.peso_id,
+            glaseo_id: b.glaseo_id || 0,
+            presentacion_id: b.presentacion_id || 0,
+            orden_id: Number(b.orden_id || 0),
+            maquina_id: b.maquina_id || 0,
+            grupo_id: b.grupo_id || 0,
+            coche_id: b.coche_id,
+            c_calidad_id: b.c_calidad_id || null,
+            defectos_id: b.defectos_id || null,
+            ingresotunel_fecha: b.ingresotunel_fecha || new Date().toISOString().slice(0, 19).replace('T', ' '),
+
+            ingresotunel_peso_neto: cleanNumber(b.ingresotunel_peso_neto),
+            ingresotunel_n_cajas: cleanNumber(b.ingresotunel_n_cajas),
+            ingresotunel_libras_netas: cleanNumber(b.ingresotunel_libras_netas),
+            ingresotunel_subtotales: cleanNumber(b.ingresotunel_subtotales),
+            ingresotunel_total: cleanNumber(b.ingresotunel_total),
+            ingresotunel_sobrante: cleanNumber(b.ingresotunel_sobrante),
+            ingresotunel_basura: cleanNumber(b.ingresotunel_basura),
+            ingresotunel_rendimiento: cleanNumber(b.ingresotunel_rendimiento),
+
+            ingresotunel_observaciones: b.ingresotunel_observaciones ?? ''
+        };
+
+        // 3) Validación mínima (igual que tu POST)
+        if (!data.lote_id || !data.tipo_id || !data.talla_id || !data.coche_id || data.ingresotunel_n_cajas <= 0) {
+            await conn.rollback();
+            return res.status(400).json({ message: "Faltan campos obligatorios" });
+        }
+
+        // 4) Update del ingreso
+        const [upd] = await conn.query(
+            `UPDATE ingresotunel SET
+        lote_id=?, usuario_id=?, proveedor_id=?, tipo_id=?, clase_id=?, color_id=?, corte_id=?, talla_id=?,
+        peso_id=?, glaseo_id=?, presentacion_id=?, orden_id=?, maquina_id=?, grupo_id=?, coche_id=?,
+        c_calidad_id=?, defectos_id=?, ingresotunel_fecha=?, ingresotunel_peso_neto=?,
+        ingresotunel_n_cajas=?, ingresotunel_libras_netas=?, ingresotunel_subtotales=?,
+        ingresotunel_total=?, ingresotunel_sobrante=?, ingresotunel_basura=?,
+        ingresotunel_rendimiento=?, ingresotunel_observaciones=?
+       WHERE ingresotunel_id=?`,
+            [
+                data.lote_id, data.usuario_id, data.proveedor_id, data.tipo_id, data.clase_id, data.color_id, data.corte_id, data.talla_id,
+                data.peso_id, data.glaseo_id, data.presentacion_id, data.orden_id, data.maquina_id, data.grupo_id, data.coche_id,
+                data.c_calidad_id, data.defectos_id, data.ingresotunel_fecha, data.ingresotunel_peso_neto,
+                data.ingresotunel_n_cajas, data.ingresotunel_libras_netas, data.ingresotunel_subtotales,
+                data.ingresotunel_total, data.ingresotunel_sobrante, data.ingresotunel_basura,
+                data.ingresotunel_rendimiento, data.ingresotunel_observaciones,
+                id
+            ]
+        );
+
+        if (upd.affectedRows <= 0) {
+            await conn.rollback();
+            return res.status(404).json({ message: "Ingreso no encontrado" });
+        }
+
+        // 5) Recalcular pendientes de orden (suma lo anterior, resta lo nuevo)
+        //    - Si antes tenía orden: devolver anteriorTotal a esa orden
+        if (anteriorOrdenId > 0 && anteriorTotal > 0) {
+            await conn.query(
+                `UPDATE orden
+         SET orden_libras_pendientes = orden_libras_pendientes + ?
+         WHERE orden_id = ?`,
+                [anteriorTotal, anteriorOrdenId]
+            );
+        }
+
+        //    - Si ahora tiene orden: descontar nuevo total (no permitir negativo)
+        if (data.orden_id > 0 && data.ingresotunel_total > 0) {
+            await conn.query(
+                `UPDATE orden
+         SET orden_libras_pendientes = GREATEST(0, orden_libras_pendientes - ?)
+         WHERE orden_id = ?`,
+                [data.ingresotunel_total, data.orden_id]
+            );
+
+            // marcar cumplida si ya llegó a 0
+            const [ordRows] = await conn.query(
+                `SELECT orden_libras_pendientes FROM orden WHERE orden_id = ?`,
+                [data.orden_id]
+            );
+
+            if (ordRows?.length) {
+                const pend = cleanNumber(ordRows[0].orden_libras_pendientes);
+                if (pend <= 0) {
+                    await conn.query(
+                        `UPDATE orden SET orden_estado = "cumplida" WHERE orden_id = ?`,
+                        [data.orden_id]
+                    );
+                    global._io?.emit("orden_cumplida", { orden_id: data.orden_id });
+                }
             }
-            global._io.emit("orden_actualizada", { orden_id });
+
+            global._io?.emit("orden_actualizada", { orden_id: data.orden_id });
         }
 
-        // Emitir WS update
-        global._io.emit("ingreso_tunel_actualizado", { ingresotunel_id: id });
+        // Si cambió de orden, también notifica la anterior
+        if (anteriorOrdenId > 0 && anteriorOrdenId !== data.orden_id) {
+            global._io?.emit("orden_actualizada", { orden_id: anteriorOrdenId });
+        }
 
-        const [rows] = await conmysql.query('SELECT * FROM ingresotunel WHERE ingresotunel_id=?', [id]);
-        res.json(rows[0]);
+        await conn.commit();
+
+        global._io?.emit("ingreso_tunel_actualizado", { ingresotunel_id: id });
+
+        const [finalRows] = await conn.query(
+            `SELECT * FROM ingresotunel WHERE ingresotunel_id = ?`,
+            [id]
+        );
+        res.json(finalRows[0]);
+
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        try { await conn.rollback(); } catch (_) { }
+        console.error("ERROR PUT INGRESO:", error);
+        res.status(500).json({ message: "Error al editar ingreso", detalle: error.message });
+    } finally {
+        conn.release();
     }
 };
 
