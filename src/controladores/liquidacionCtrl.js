@@ -317,6 +317,7 @@ const num = (v) => {
 /* ================================================================
    GET /liquidacion?tipo=entero|cola
    ✅ Totales calculados desde INGRESOTUNEL (reglas nuevas)
+   ✅ Rendimiento calculado IGUAL QUE INGRESO (SUM(total) / peso_promedio * 100)
 ================================================================ */
 export const getLiquidaciones = async (req, res) => {
   try {
@@ -350,9 +351,13 @@ export const getLiquidaciones = async (req, res) => {
         ) AS total_procesado,
 
         COALESCE(SUM(it.ingresotunel_n_cajas),0) AS total_cajas,
+        COUNT(DISTINCT it.coche_id) AS total_coches,
 
-        -- ✅ coches reales (NO sumar det.coches): coches únicos usados en el lote/tipo
-        COUNT(DISTINCT it.coche_id) AS total_coches
+        -- ✅ Rendimiento calculado (misma lógica de Ingreso)
+        IF(lo.lote_peso_promedio > 0,
+          (COALESCE(SUM(it.ingresotunel_total),0) / lo.lote_peso_promedio) * 100,
+          0
+        ) AS rendimiento_calculado
 
       FROM liquidacion li
       INNER JOIN lote lo ON lo.lote_id = li.lote_id
@@ -378,6 +383,7 @@ export const getLiquidaciones = async (req, res) => {
 /* ================================================================
    GET /liquidacion/:id
    ✅ Cabecera también con reglas nuevas desde ingresotunel
+   ✅ Rendimiento calculado IGUAL QUE INGRESO
 ================================================================ */
 export const getLiquidacionxid = async (req, res) => {
   try {
@@ -411,11 +417,14 @@ export const getLiquidacionxid = async (req, res) => {
           COALESCE(SUM(it.ingresotunel_basura),0)
         ) AS total_procesado,
 
-        -- ✅ Cajas coherentes (suma real)
         COALESCE(SUM(it.ingresotunel_n_cajas),0) AS total_cajas,
+        COUNT(DISTINCT it.coche_id) AS total_coches,
 
-        -- ✅ COCHES coherentes (NO sumar det.coches, sino DISTINCT)
-        COUNT(DISTINCT it.coche_id) AS total_coches
+        -- ✅ Rendimiento calculado (MISMA fórmula de ingreso: SUM(total) / peso_promedio * 100)
+        IF(lo.lote_peso_promedio > 0,
+          (COALESCE(SUM(it.ingresotunel_total),0) / lo.lote_peso_promedio) * 100,
+          0
+        ) AS rendimiento_calculado
 
       FROM liquidacion li
       INNER JOIN lote lo     ON lo.lote_id = li.lote_id
@@ -460,8 +469,9 @@ export const getLiquidacionxid = async (req, res) => {
 
 /* ================================================================
    POST /liquidacion
-   ✅ Genera liquidación guardando EMPACADO=Σsubtotales
-   ✅ SOBRANTE=Σsobrantes  BASURA=Σbasura  PROCESADO=SUMA
+   ✅ Totales nuevos desde ingresotunel
+   ✅ Rendimiento replicado EXACTO del Ingreso (getRendimientoLote):
+      rendimiento = SUM(ingresotunel_total) / lote_peso_promedio * 100
 ================================================================ */
 export const postLiquidacion = async (req, res) => {
   try {
@@ -475,30 +485,14 @@ export const postLiquidacion = async (req, res) => {
       [map.tipoId, lote_id]
     );
 
-    // Lote (para rendimiento)
-    /*     const [[lot]] = await conmysql.query(
-          `SELECT lote_peso_promedio, parent_lote_id FROM lote WHERE lote_id = ?`,
-          [lote_id]
-        ); */
-
+    // Lote (para rendimiento basado en la lógica de Ingreso)
     const [[lot]] = await conmysql.query(
-      `SELECT lote_peso_promedio, lote_libras_remitidas, lote_n_bines, parent_lote_id
-   FROM lote
-   WHERE lote_id = ?`,
+      `SELECT lote_peso_promedio, parent_lote_id FROM lote WHERE lote_id = ?`,
       [lote_id]
     );
 
-    const pesoPromedio = num(lot?.lote_peso_promedio);        // lb/bin
-    const librasRemitidas = num(lot?.lote_libras_remitidas);  // lb total lote (lo más confiable)
-    const nBines = num(lot?.lote_n_bines);
+    const pesoPromedio = num(lot?.lote_peso_promedio); // ✅ MISMA base que getRendimientoLote
     const parentLoteId = num(lot?.parent_lote_id);
-
-    // ✅ base total lote (prioriza remitidas; fallback: promedio*bines)
-    const baseTotal = librasRemitidas > 0 ? librasRemitidas : (pesoPromedio * nBines);
-
-
-    //const pesoPromedio = num(lot?.lote_peso_promedio);
-    //const parentLoteId = num(lot?.parent_lote_id);
 
     // Cargar ingresos del lote y tipo (con textos finales de orden para detalle)
     const [ing] = await conmysql.query(
@@ -531,14 +525,19 @@ export const postLiquidacion = async (req, res) => {
 
     if (!ing.length) return res.status(400).json({ message: "No ingresos para este tipo" });
 
-    // ✅ Reglas nuevas
+    // ✅ Reglas nuevas (Liquidación)
     const totalEmpacado = ing.reduce((s, x) => s + num(x.ingresotunel_subtotales), 0);
     const totalSobrante = ing.reduce((s, x) => s + num(x.ingresotunel_sobrante), 0);
     const totalBasura = ing.reduce((s, x) => s + num(x.ingresotunel_basura), 0);
-    const totalClasificado = 0; // apartado
+    const totalClasificado = 0;
     const totalProcesado = totalEmpacado + totalSobrante + totalClasificado + totalBasura;
 
-    // Rendimiento (consistente con tu ingreso: entero usa subtotales)
+    // ✅ Rendimiento replicado EXACTO de Ingreso:
+    // Ingreso usa SUM(ingresotunel_total) / lote_peso_promedio * 100
+    const sumTotalIngreso = ing.reduce((s, x) => s + num(x.ingresotunel_total), 0);
+
+    // Nota: dejo tu cálculo de parentBasura por si lo ocupas luego,
+    // pero NO lo uso porque Ingreso NO lo usa en getRendimientoLote.
     let parentBasura = 0;
     if (map.tipoId === 2 && parentLoteId > 0) {
       const [pIng] = await conmysql.query(
@@ -548,24 +547,8 @@ export const postLiquidacion = async (req, res) => {
       parentBasura = num(pIng?.[0]?.bas);
     }
 
-    /*     let rendimiento = 0;
-        if (map.tipoId === 1) {
-          rendimiento = pesoPromedio > 0 ? (totalEmpacado / pesoPromedio) * 100 : 0;
-        } else {
-          const base = pesoPromedio - parentBasura - totalBasura;
-          rendimiento = base > 0 ? (totalEmpacado / base) * 100 : 0;
-        } */
-
-    let rendimiento = 0;
-
-    if (map.tipoId === 1) {
-      // ENTERO: empacado / base total * 100
-      rendimiento = baseTotal > 0 ? (totalEmpacado / baseTotal) * 100 : 0;
-    } else {
-      // COLA: deja tu lógica actual si ya está validada
-      const base = baseTotal - parentBasura - totalBasura; // o tu fórmula final
-      rendimiento = base > 0 ? (totalEmpacado / base) * 100 : 0;
-    }
+    const rendimiento =
+      pesoPromedio > 0 ? (sumTotalIngreso / pesoPromedio) * 100 : 0;
 
     // Eliminar liquidación previa (si existe)
     const [old] = await conmysql.query(
@@ -578,8 +561,7 @@ export const postLiquidacion = async (req, res) => {
       await conmysql.query(`DELETE FROM liquidacion WHERE liquidacion_id=?`, [old[0].liquidacion_id]);
     }
 
-    // Agrupar detalle (libras = empacado por grupo = Σsubtotales)
-    // Agrupar detalle (libras = empacado por grupo = Σsubtotales)
+    // Agrupar detalle (libras = Σsubtotales)
     const detMap = {};
 
     ing.forEach(i => {
@@ -606,8 +588,6 @@ export const postLiquidacion = async (req, res) => {
           peso: i.peso_final,
           cajas: 0,
           libras: 0,
-
-          // ✅ coches únicos (por coche_id)
           _cochesSet: new Set()
         };
       }
@@ -615,20 +595,17 @@ export const postLiquidacion = async (req, res) => {
       detMap[key].cajas += num(i.ingresotunel_n_cajas);
       detMap[key].libras += num(i.ingresotunel_subtotales);
 
-      // ✅ Cuenta coches únicos
       const cocheId = num(i.coche_id);
       if (cocheId > 0) detMap[key]._cochesSet.add(cocheId);
     });
 
-    // ✅ Totales globales coherentes con detalles
     const detallesArr = Object.values(detMap).map(d => ({
       ...d,
       coches: d._cochesSet.size
     }));
 
     const totalCajas = detallesArr.reduce((s, d) => s + num(d.cajas), 0);
-    //const totalCoches = detallesArr.reduce((s, d) => s + num(d.coches), 0);
-    // ✅ coches GLOBAL: DISTINCT en todos los ingresos del lote+tipo
+
     const cochesSet = new Set();
     ing.forEach(i => {
       const cocheId = num(i.coche_id);
@@ -636,7 +613,7 @@ export const postLiquidacion = async (req, res) => {
     });
     const totalCoches = cochesSet.size;
 
-    // Insert cabecera: guardamos EMPACADO en liquidacion_total_libras
+    // Insert cabecera (guardas empacado en liquidacion_total_libras como ya lo haces)
     const [ins] = await conmysql.query(
       `
       INSERT INTO liquidacion
@@ -662,11 +639,11 @@ export const postLiquidacion = async (req, res) => {
     for (const d of detallesArr) {
       await conmysql.query(
         `
-    INSERT INTO liquidacion_detalle
-    (liquidacion_id, talla, clase, color, corte, peso, glaseo,
-     presentacion, orden, cajas, coches, libras)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
+        INSERT INTO liquidacion_detalle
+        (liquidacion_id, talla, clase, color, corte, peso, glaseo,
+         presentacion, orden, cajas, coches, libras)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
         [
           liquidacion_id,
           d.talla, d.clase, d.color, d.corte, d.peso,
@@ -685,7 +662,11 @@ export const postLiquidacion = async (req, res) => {
       total_procesado: totalProcesado,
       total_cajas: totalCajas,
       total_coches: totalCoches,
-      rendimiento: Number(rendimiento.toFixed(2))
+      // rendimiento coherente con Ingreso
+      rendimiento: Number(rendimiento.toFixed(2)),
+      // útil para depurar
+      sum_total_ingreso: Number(sumTotalIngreso.toFixed(2)),
+      peso_promedio_base: Number(pesoPromedio.toFixed(2))
     });
 
   } catch (err) {
