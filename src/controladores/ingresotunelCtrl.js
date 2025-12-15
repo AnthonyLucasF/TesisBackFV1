@@ -124,7 +124,7 @@ export const getRendimientoLote = async (req, res) => {
 };
 
 // POST: Crear nuevo ingreso, validar campos, actualizar orden pendientes, emitir WS
-export const postIngresoTunel = async (req, res) => {
+/* export const postIngresoTunel = async (req, res) => {
     try {
         const body = req.body;
 
@@ -222,6 +222,149 @@ export const postIngresoTunel = async (req, res) => {
         }
 
         global._io?.emit("ingreso_tunel_nuevo", { ingresotunel_id: nuevoId });
+        res.json({ id: nuevoId, message: "Ingreso registrado con éxito" });
+
+    } catch (error) {
+        console.error("ERROR POST INGRESO:", error);
+        res.status(500).json({
+            message: "Error al registrar ingreso",
+            sqlError: error.message
+        });
+    }
+}; */
+
+// POST: Crear nuevo ingreso, validar campos, actualizar orden pendientes, emitir WS
+export const postIngresoTunel = async (req, res) => {
+    try {
+        const body = req.body;
+
+        const cleanNumber = (val) => {
+            if (val === null || val === undefined || val === '') return 0;
+            const num = parseFloat(String(val).replace(/[^\d.,-]/g, '').replace(',', '.'));
+            return isNaN(num) ? 0 : num;
+        };
+
+        // ✅ Normaliza IDs: si viene 0 => NULL (para no romper FK)
+        const cleanIdOrNull = (val) => {
+            const n = Number(val);
+            return (!n || n <= 0) ? null : n;
+        };
+
+        // === BUSCAR ÚLTIMO CONTROL DE CALIDAD DEL LOTE ===
+        let c_calidad_id = null;
+        let defectos_id = null;
+
+        if (body.lote_id) {
+            const [calidad] = await conmysql.query(
+                `SELECT c_calidad_id, defectos_id
+         FROM control_calidad
+         WHERE lote_id = ?
+         ORDER BY c_calidad_id DESC
+         LIMIT 1`,
+                [body.lote_id]
+            );
+            if (calidad.length > 0) {
+                c_calidad_id = calidad[0].c_calidad_id;
+                defectos_id = calidad[0].defectos_id;
+            }
+        }
+
+        // === DATOS FINALES CON DEFAULTS ===
+        const data = {
+            lote_id: cleanIdOrNull(body.lote_id),
+            usuario_id: cleanIdOrNull(body.usuario_id) ?? 1,
+            proveedor_id: cleanIdOrNull(body.proveedor_id) ?? 0,
+
+            tipo_id: cleanIdOrNull(body.tipo_id),
+            clase_id: cleanIdOrNull(body.clase_id) ?? 0,
+            color_id: cleanIdOrNull(body.color_id) ?? 0,
+            corte_id: cleanIdOrNull(body.corte_id) ?? 0,
+            talla_id: cleanIdOrNull(body.talla_id),
+
+            peso_id: cleanIdOrNull(body.peso_id),
+            glaseo_id: cleanIdOrNull(body.glaseo_id) ?? 0,
+            presentacion_id: cleanIdOrNull(body.presentacion_id) ?? 0,
+
+            // ✅ AQUÍ ESTÁ LA CORRECCIÓN
+            // Si no hay orden => NULL (no 0)
+            orden_id: cleanIdOrNull(body.orden_id),
+
+            maquina_id: cleanIdOrNull(body.maquina_id) ?? 0,
+            grupo_id: cleanIdOrNull(body.grupo_id) ?? 0,
+            coche_id: cleanIdOrNull(body.coche_id),
+
+            c_calidad_id,
+            defectos_id,
+
+            ingresotunel_fecha:
+                body.ingresotunel_fecha || new Date().toISOString().slice(0, 19).replace('T', ' '),
+
+            ingresotunel_peso_neto: cleanNumber(body.ingresotunel_peso_neto),
+            ingresotunel_n_cajas: cleanNumber(body.ingresotunel_n_cajas),
+            ingresotunel_libras_netas: cleanNumber(body.ingresotunel_libras_netas),
+            ingresotunel_subtotales: cleanNumber(body.ingresotunel_subtotales),
+            ingresotunel_total: cleanNumber(body.ingresotunel_total),
+            ingresotunel_sobrante: cleanNumber(body.ingresotunel_sobrante),
+            ingresotunel_basura: cleanNumber(body.ingresotunel_basura),
+            ingresotunel_rendimiento: cleanNumber(body.ingresotunel_rendimiento),
+
+            ingresotunel_observaciones: body.ingresotunel_observaciones || 'Todo Perfecto :D'
+        };
+
+        // === VALIDACIÓN OBLIGATORIA ===
+        // Nota: orden_id NO es obligatorio (puede ser NULL)
+        if (!data.lote_id || !data.tipo_id || !data.talla_id || !data.coche_id || data.ingresotunel_n_cajas <= 0) {
+            return res.status(400).json({ message: "Faltan campos obligatorios" });
+        }
+
+        // === INSERT ===
+        const [rows] = await conmysql.query(
+            `INSERT INTO ingresotunel (
+        lote_id, usuario_id, proveedor_id, tipo_id, clase_id, color_id, corte_id, talla_id,
+        peso_id, glaseo_id, presentacion_id, orden_id, maquina_id, grupo_id, coche_id,
+        c_calidad_id, defectos_id, ingresotunel_fecha, ingresotunel_peso_neto,
+        ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales,
+        ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura,
+        ingresotunel_rendimiento, ingresotunel_observaciones
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [
+                data.lote_id, data.usuario_id, data.proveedor_id, data.tipo_id, data.clase_id,
+                data.color_id, data.corte_id, data.talla_id, data.peso_id, data.glaseo_id,
+                data.presentacion_id, data.orden_id, data.maquina_id, data.grupo_id, data.coche_id,
+                data.c_calidad_id, data.defectos_id, data.ingresotunel_fecha, data.ingresotunel_peso_neto,
+                data.ingresotunel_n_cajas, data.ingresotunel_libras_netas, data.ingresotunel_subtotales,
+                data.ingresotunel_total, data.ingresotunel_sobrante, data.ingresotunel_basura,
+                data.ingresotunel_rendimiento, data.ingresotunel_observaciones
+            ]
+        );
+
+        const nuevoId = rows.insertId;
+
+        // === ACTUALIZAR ORDEN (solo si hay orden real) ===
+        if (data.orden_id && data.ingresotunel_total > 0) {
+            // ✅ Si quieres que "Sin Orden" NO descuente pendientes, detecta por código/microlote
+            const [ordRows] = await conmysql.query(
+                `SELECT orden_codigo, orden_microlote FROM orden WHERE orden_id = ? LIMIT 1`,
+                [data.orden_id]
+            );
+
+            const codigo = (ordRows?.[0]?.orden_codigo || '').toLowerCase();
+            const microlote = (ordRows?.[0]?.orden_microlote || '').toLowerCase();
+            const esSinOrden = codigo.includes('sin orden') || microlote.includes('sin orden');
+
+            if (!esSinOrden) {
+                await conmysql.query(
+                    `UPDATE orden
+           SET orden_libras_pendientes = GREATEST(0, orden_libras_pendientes - ?)
+           WHERE orden_id = ?`,
+                    [data.ingresotunel_total, data.orden_id]
+                );
+                global._io?.emit("orden_actualizada", { orden_id: data.orden_id });
+            }
+        }
+
+        global._io?.emit("ingreso_tunel_nuevo", { ingresotunel_id: nuevoId });
+
         res.json({ id: nuevoId, message: "Ingreso registrado con éxito" });
 
     } catch (error) {
@@ -401,9 +544,7 @@ export const deleteIngresoTunel = async (req, res) => {
 
         // Fetch para ajustar pendientes
         const [ingreso] = await conmysql.query('SELECT orden_id, ingresotunel_total FROM ingresotunel WHERE ingresotunel_id = ?', [id]);
-        //const ordenId = ingreso[0].orden_id;
-        const ordenId = Number(req.body.orden_id || 0);
-        req.body.orden_id = ordenId > 0 ? ordenId : null;
+        const ordenId = ingreso[0].orden_id;
         const total = ingreso[0].ingresotunel_total;
 
         await conmysql.query('DELETE FROM ingresotunel WHERE ingresotunel_id = ?', [id]);
