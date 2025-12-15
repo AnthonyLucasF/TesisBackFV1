@@ -395,7 +395,7 @@ export const getLiquidacionxid = async (req, res) => {
         lo.lote_n_piscina,
         lo.lote_peso_promedio AS peso_promedio,
 
-        -- ✅ Totales por reglas nuevas (usando tipo_id según liquidacion_tipo)
+        -- ✅ Totales por reglas nuevas
         COALESCE(SUM(it.ingresotunel_subtotales),0) AS total_empacado,
         COALESCE(SUM(it.ingresotunel_sobrante),0)   AS total_sobrante,
         COALESCE(SUM(it.ingresotunel_basura),0)     AS total_basura,
@@ -406,7 +406,12 @@ export const getLiquidacionxid = async (req, res) => {
           0 +
           COALESCE(SUM(it.ingresotunel_basura),0)
         ) AS total_procesado,
-        COALESCE(SUM(it.ingresotunel_n_cajas),0) AS total_cajas
+
+        -- ✅ Cajas coherentes (suma real)
+        COALESCE(SUM(it.ingresotunel_n_cajas),0) AS total_cajas,
+
+        -- ✅ COCHES coherentes (NO sumar det.coches, sino DISTINCT)
+        COUNT(DISTINCT it.coche_id) AS total_coches
 
       FROM liquidacion li
       INNER JOIN lote lo     ON lo.lote_id = li.lote_id
@@ -591,7 +596,14 @@ export const postLiquidacion = async (req, res) => {
     }));
 
     const totalCajas = detallesArr.reduce((s, d) => s + num(d.cajas), 0);
-    const totalCoches = detallesArr.reduce((s, d) => s + num(d.coches), 0);
+    //const totalCoches = detallesArr.reduce((s, d) => s + num(d.coches), 0);
+    // ✅ coches GLOBAL: DISTINCT en todos los ingresos del lote+tipo
+    const cochesSet = new Set();
+    ing.forEach(i => {
+      const cocheId = num(i.coche_id);
+      if (cocheId > 0) cochesSet.add(cocheId);
+    });
+    const totalCoches = cochesSet.size;
 
     // Insert cabecera: guardamos EMPACADO en liquidacion_total_libras
     const [ins] = await conmysql.query(
