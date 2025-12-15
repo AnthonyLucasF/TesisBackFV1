@@ -264,19 +264,16 @@ export const deleteOrden = async (req, res) => {
 
 import { conmysql } from "../db.js";
 
-/**
- * Helper: obtiene la descripción de talla (talla_descripcion) desde talla_id
- * para forzar orden_talla_marcada = talla seleccionada.
- */
-async function getTallaDescripcionById(tallaId) {
+/** Obtiene la descripción real de la talla según talla_id */
+const getTallaDescripcionById = async (tallaId) => {
   const [rows] = await conmysql.query(
     "SELECT talla_descripcion FROM talla WHERE talla_id = ? LIMIT 1",
     [tallaId]
   );
   return rows.length ? rows[0].talla_descripcion : null;
-}
+};
 
-// GET: Todas las órdenes con talla, pendientes y sobrantes (+ peso y glaseo si existen)
+// GET: Todas las órdenes con talla, pendientes y sobrantes (+ peso_id, glaseo_id ya vienen en o.*)
 export const getOrden = async (req, res) => {
   try {
     const [result] = await conmysql.query(`
@@ -364,10 +361,9 @@ export const getOrdenesPendientes = async (req, res) => {
   }
 };
 
-// POST: Crear orden
-// - pendientes = total
-// - sobrantes = 0
-// - orden_talla_marcada = talla_descripcion según talla_id seleccionado
+// POST: Crear orden (pendientes = total, sobrantes = 0)
+// + peso_id, glaseo_id
+// + orden_talla_marcada se fuerza con la talla seleccionada
 export const postOrden = async (req, res) => {
   try {
     const {
@@ -376,8 +372,8 @@ export const postOrden = async (req, res) => {
       orden_cliente,
       orden_lote_cliente,
       orden_fecha_produccion,
-      orden_fecha_juliana,
-      orden_talla_real,
+      orden_fecha_juliana, // se mantiene (futura actualización)
+      orden_talla_real,    // se mantiene
       orden_microlote,
       orden_total_master,
       orden_total_libras,
@@ -386,39 +382,28 @@ export const postOrden = async (req, res) => {
       glaseo_id
     } = req.body;
 
-    const totalMaster = Number(orden_total_master) || 0;
-    const totalLibras = Number(orden_total_libras);
+    if (orden_total_libras == null || !talla_id)
+      return res.status(400).json({ message: "orden_total_libras y talla_id requeridos" });
+
     const tallaId = Number(talla_id) || 0;
-    const pesoId = peso_id != null ? Number(peso_id) : null;
-    const glaseoId = glaseo_id != null ? Number(glaseo_id) : null;
+    if (tallaId <= 0) return res.status(400).json({ message: "talla_id inválido" });
 
-    if (isNaN(totalLibras) || totalLibras <= 0) {
-      return res.status(400).json({ message: "orden_total_libras requerido y mayor a 0" });
-    }
-    if (tallaId <= 0) {
-      return res.status(400).json({ message: "talla_id requerido y mayor a 0" });
-    }
-
-    // Forzar orden_talla_marcada a lo que corresponde al talla_id
+    // Forzar orden_talla_marcada según catálogo talla
     const tallaMarcada = await getTallaDescripcionById(tallaId);
-    if (!tallaMarcada) {
-      return res.status(400).json({ message: "talla_id no existe" });
-    }
+    if (!tallaMarcada) return res.status(400).json({ message: "talla_id no existe" });
 
-    const orden_libras_pendientes = totalLibras;
+    const orden_libras_pendientes = Number(orden_total_libras);
     const orden_libras_sobrantes = 0;
     const orden_estado = "pendiente";
 
     const [insert] = await conmysql.query(
-      `
-      INSERT INTO orden (
+      `INSERT INTO orden (
         orden_codigo, orden_descripcion, orden_cliente, orden_lote_cliente,
-        orden_fecha_produccion, orden_fecha_juliana, orden_talla_real,
+        orden_fecha_produccion, orden_fecha_juliana, orden_talla_real, 
         orden_talla_marcada, orden_microlote, orden_total_master,
         orden_total_libras, orden_libras_pendientes, orden_libras_sobrantes,
         orden_estado, talla_id, peso_id, glaseo_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orden_codigo || null,
         orden_descripcion || null,
@@ -427,26 +412,26 @@ export const postOrden = async (req, res) => {
         orden_fecha_produccion || null,
         orden_fecha_juliana || null,
         orden_talla_real || null,
-        tallaMarcada, // <- forzado
+        tallaMarcada, // <- FORZADO
         orden_microlote || null,
-        totalMaster,
-        totalLibras,
+        Number(orden_total_master) || 0,
+        Number(orden_total_libras),
         orden_libras_pendientes,
         orden_libras_sobrantes,
         orden_estado,
         tallaId,
-        pesoId,
-        glaseoId
+        peso_id != null && peso_id !== "" ? Number(peso_id) : null,
+        glaseo_id != null && glaseo_id !== "" ? Number(glaseo_id) : null
       ]
     );
 
     const nuevoId = insert.insertId;
 
-    // Devuelve la orden creada con talla_descripcion y cálculo
+    // Devuelve lo creado con el mismo formato que tus GET (incluye cálculo y talla_descripcion)
     const [nuevo] = await conmysql.query(
       `
       SELECT 
-        o.*,
+        o.*, 
         t.talla_descripcion,
         GREATEST(o.orden_total_libras - IFNULL(SUM(i.ingresotunel_total), 0), 0) AS orden_libras_pendientes,
         GREATEST(IFNULL(SUM(i.ingresotunel_total), 0) - o.orden_total_libras, 0) AS orden_libras_sobrantes
@@ -459,7 +444,7 @@ export const postOrden = async (req, res) => {
       [nuevoId]
     );
 
-    global._io?.emit("orden_nueva", nuevo[0]);
+    global._io.emit("orden_nueva", nuevo[0]);
 
     res.json(nuevo[0]);
   } catch (error) {
@@ -468,15 +453,12 @@ export const postOrden = async (req, res) => {
   }
 };
 
-// PUT: Actualizar orden
-// - recalcula pendientes y sobrantes
-// - orden_talla_marcada = talla_descripcion de talla_id (forzado)
+// PUT: Actualizar orden con pendientes y sobrantes correctos
+// + peso_id, glaseo_id
+// + orden_talla_marcada se fuerza con la talla seleccionada
 export const putOrden = async (req, res) => {
   try {
     const { id } = req.params;
-    const ordenId = Number(id);
-
-    if (!ordenId) return res.status(400).json({ message: "ID de orden inválido" });
 
     const {
       orden_codigo,
@@ -484,8 +466,8 @@ export const putOrden = async (req, res) => {
       orden_cliente,
       orden_lote_cliente,
       orden_fecha_produccion,
-      orden_fecha_juliana,
-      orden_talla_real,
+      orden_fecha_juliana, // se mantiene
+      orden_talla_real,    // se mantiene
       orden_microlote,
       orden_total_master,
       orden_total_libras,
@@ -494,11 +476,10 @@ export const putOrden = async (req, res) => {
       glaseo_id
     } = req.body;
 
+    // Validaciones básicas
     const totalMaster = Number(orden_total_master) || 0;
     const totalLibras = Number(orden_total_libras);
     const tallaId = Number(talla_id) || 0;
-    const pesoId = peso_id != null ? Number(peso_id) : null;
-    const glaseoId = glaseo_id != null ? Number(glaseo_id) : null;
 
     if (isNaN(totalLibras) || totalLibras <= 0) {
       return res.status(400).json({ message: "orden_total_libras requerido y mayor a 0" });
@@ -507,10 +488,14 @@ export const putOrden = async (req, res) => {
       return res.status(400).json({ message: "talla_id requerido y mayor a 0" });
     }
 
+    // Manejo seguro de fechas
+    const fechaProduccion = orden_fecha_produccion || null;
+    const fechaJuliana = orden_fecha_juliana || null;
+
     // Obtener libras ya empacadas
     const [agg] = await conmysql.query(
       "SELECT IFNULL(SUM(ingresotunel_total), 0) AS empacadas FROM ingresotunel WHERE orden_id = ?",
-      [ordenId]
+      [id]
     );
     const empacadas = Number(agg[0].empacadas) || 0;
 
@@ -521,11 +506,9 @@ export const putOrden = async (req, res) => {
       });
     }
 
-    // Forzar orden_talla_marcada a la descripción real del catálogo
+    // Forzar orden_talla_marcada según catálogo talla
     const tallaMarcada = await getTallaDescripcionById(tallaId);
-    if (!tallaMarcada) {
-      return res.status(400).json({ message: "talla_id no existe" });
-    }
+    if (!tallaMarcada) return res.status(400).json({ message: "talla_id no existe" });
 
     // Calcular pendientes y sobrantes
     let orden_libras_pendientes = totalLibras - empacadas;
@@ -538,38 +521,36 @@ export const putOrden = async (req, res) => {
 
     const orden_estado = orden_libras_pendientes > 0 ? "pendiente" : "cumplida";
 
-    // Actualizar orden en DB
+    // Actualizar orden en la DB
     const [update] = await conmysql.query(
-      `
-      UPDATE orden SET
-        orden_codigo = ?,
-        orden_descripcion = ?,
-        orden_cliente = ?,
-        orden_lote_cliente = ?,
-        orden_fecha_produccion = ?,
-        orden_fecha_juliana = ?,
-        orden_talla_real = ?,
-        orden_talla_marcada = ?,
-        orden_microlote = ?,
-        orden_total_master = ?,
-        orden_total_libras = ?,
-        orden_libras_pendientes = ?,
-        orden_libras_sobrantes = ?,
-        orden_estado = ?,
-        talla_id = ?,
-        peso_id = ?,
-        glaseo_id = ?
-      WHERE orden_id = ?
-      `,
+      `UPDATE orden SET
+         orden_codigo = ?,
+         orden_descripcion = ?,
+         orden_cliente = ?,
+         orden_lote_cliente = ?,
+         orden_fecha_produccion = ?,
+         orden_fecha_juliana = ?,
+         orden_talla_real = ?,
+         orden_talla_marcada = ?,
+         orden_microlote = ?,
+         orden_total_master = ?,
+         orden_total_libras = ?,
+         orden_libras_pendientes = ?,
+         orden_libras_sobrantes = ?,
+         orden_estado = ?,
+         talla_id = ?,
+         peso_id = ?,
+         glaseo_id = ?
+       WHERE orden_id = ?`,
       [
         orden_codigo || null,
         orden_descripcion || null,
         orden_cliente || null,
         orden_lote_cliente || null,
-        orden_fecha_produccion || null,
-        orden_fecha_juliana || null,
+        fechaProduccion,
+        fechaJuliana,
         orden_talla_real || null,
-        tallaMarcada, // <- forzado
+        tallaMarcada, // <- FORZADO
         orden_microlote || null,
         totalMaster,
         totalLibras,
@@ -577,9 +558,9 @@ export const putOrden = async (req, res) => {
         orden_libras_sobrantes,
         orden_estado,
         tallaId,
-        pesoId,
-        glaseoId,
-        ordenId
+        peso_id != null && peso_id !== "" ? Number(peso_id) : null,
+        glaseo_id != null && glaseo_id !== "" ? Number(glaseo_id) : null,
+        id
       ]
     );
 
@@ -587,11 +568,11 @@ export const putOrden = async (req, res) => {
       return res.status(404).json({ message: "Orden no encontrada" });
     }
 
-    // Obtener orden actualizada (con cálculo)
+    // Obtener orden actualizada (con cálculos y talla_descripcion)
     const [actualizado] = await conmysql.query(
       `
       SELECT 
-        o.*,
+        o.*, 
         t.talla_descripcion,
         GREATEST(o.orden_total_libras - IFNULL(SUM(i.ingresotunel_total), 0), 0) AS orden_libras_pendientes,
         GREATEST(IFNULL(SUM(i.ingresotunel_total), 0) - o.orden_total_libras, 0) AS orden_libras_sobrantes
@@ -601,11 +582,12 @@ export const putOrden = async (req, res) => {
       WHERE o.orden_id = ?
       GROUP BY o.orden_id
       `,
-      [ordenId]
+      [id]
     );
 
-    global._io?.emit("orden_actualizada", actualizado[0]);
-    if (orden_estado === "cumplida") global._io?.emit("orden_cumplida", actualizado[0]);
+    // Emitir eventos via sockets
+    global._io.emit("orden_actualizada", actualizado[0]);
+    if (orden_estado === "cumplida") global._io.emit("orden_cumplida", actualizado[0]);
 
     res.json(actualizado[0]);
   } catch (error) {
@@ -618,13 +600,10 @@ export const putOrden = async (req, res) => {
 export const deleteOrden = async (req, res) => {
   try {
     const { id } = req.params;
-    const ordenId = Number(id);
 
-    if (!ordenId) return res.status(400).json({ message: "ID inválido" });
+    await conmysql.query("DELETE FROM orden WHERE orden_id = ?", [id]);
 
-    await conmysql.query("DELETE FROM orden WHERE orden_id = ?", [ordenId]);
-
-    global._io?.emit("orden_eliminada", { orden_id: ordenId });
+    global._io.emit("orden_eliminada", { orden_id: Number(id) });
 
     res.status(202).json({ message: "Orden eliminada con éxito" });
   } catch (error) {
