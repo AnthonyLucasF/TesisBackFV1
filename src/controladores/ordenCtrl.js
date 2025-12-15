@@ -390,20 +390,24 @@ const isEmpty = (v) => v == null || String(v).trim() === "";
 
 /** Reglas de "Otro" */
 const PESO_OTRO_KG_ID = 8;
-const PESO_OTRO_LB_ID = 9;
+const PESO_OTRO_G_ID = 9;
+const PESO_OTRO_LB_ID = 10;
+
 const GLASEO_OTRO_ID = 10;
+
 const KG_TO_LB = 2.2046;
+const G_TO_LB_DIV = 453.59237;
 
 /**
  * Normaliza “Otro Peso”:
- * - Si es Kg (id=8) convierte a lb para orden_peso_cantidad_otro
- * - Si es lb (id=9) se guarda directo
+ * - Kg (id=8) -> convierte a lb (para cálculos) y guarda texto "X Kg"
+ * - g  (id=9) -> convierte a lb (para cálculos) y guarda texto "X g"
+ * - lb (id=10)-> guarda directo y texto "X lb"
  */
 function buildPesoOtro({ peso_id, peso_otro_valor }) {
   const pesoId = Number(peso_id);
 
-  if (pesoId !== PESO_OTRO_KG_ID && pesoId !== PESO_OTRO_LB_ID) {
-    // No es "otro": no se guarda custom
+  if (pesoId !== PESO_OTRO_KG_ID && pesoId !== PESO_OTRO_G_ID && pesoId !== PESO_OTRO_LB_ID) {
     return { orden_peso_otro: null, orden_peso_cantidad_otro: null };
   }
 
@@ -412,17 +416,26 @@ function buildPesoOtro({ peso_id, peso_otro_valor }) {
     throw new Error("Peso 'Otro' inválido. Debe ser un número mayor a 0.");
   }
 
+  // Kg -> lb
   if (pesoId === PESO_OTRO_KG_ID) {
     return {
       orden_peso_otro: `${val} Kg`,
-      orden_peso_cantidad_otro: val * KG_TO_LB, // guardamos en lb para cálculos
+      orden_peso_cantidad_otro: val * KG_TO_LB,
     };
   }
 
-  // lb
+  // g -> lb
+  if (pesoId === PESO_OTRO_G_ID) {
+    return {
+      orden_peso_otro: `${val} g`,
+      orden_peso_cantidad_otro: val / G_TO_LB_DIV,
+    };
+  }
+
+  // lb -> lb
   return {
     orden_peso_otro: `${val} lb`,
-    orden_peso_cantidad_otro: val, // ya viene en lb
+    orden_peso_cantidad_otro: val,
   };
 }
 
