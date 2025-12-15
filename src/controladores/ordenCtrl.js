@@ -446,6 +446,7 @@ const selectOrdenBase = `
   SELECT 
     o.*,
     t.talla_descripcion,
+    t.tipo_id AS talla_tipo_id,
     p.peso_descripcion,
     g.glaseo_cantidad,
 
@@ -467,7 +468,30 @@ export const getOrden = async (req, res) => {
     const [result] = await conmysql.query(`
       ${selectOrdenBase}
       GROUP BY o.orden_id
-      ORDER BY o.orden_fecha_produccion DESC
+      ORDER BY
+        -- 1) Sobrantes primero, luego faltantes, luego “en 0”
+        CASE
+          WHEN orden_libras_sobrantes > 0 THEN 0
+          WHEN orden_libras_pendientes > 0 THEN 1
+          ELSE 2
+        END,
+
+        -- (Opcional) dentro del grupo: más sobrante / más pendiente arriba
+        orden_libras_sobrantes DESC,
+        orden_libras_pendientes DESC,
+
+        -- 2) Talla: Entero (tipo_id=1) primero, luego Cola (tipo_id=2)
+        CASE
+          WHEN t.tipo_id = 1 THEN 0
+          WHEN t.tipo_id = 2 THEN 1
+          ELSE 2
+        END,
+
+        -- orden natural de talla
+        t.talla_id ASC,
+
+        -- fallback
+        o.orden_fecha_produccion DESC
     `);
 
     res.json(result);
