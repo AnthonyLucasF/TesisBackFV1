@@ -12,24 +12,34 @@ export const getIngresoTunel = async (req, res) => {
 
 // SELECT por lote_id (para resumen entero/cola)
 export const getIngresoTunelPorLote = async (req, res) => {
-    try {
-        const { lote_id } = req.params;
-        const [result] = await conmysql.query(`
-      SELECT i.*, t.tipo_descripcion, ta.talla_descripcion, p.peso_descripcion,
-             c.coche_descripcion, o.orden_microlote
+  try {
+    const { lote_id } = req.params;
+    const [result] = await conmysql.query(`
+      SELECT 
+        i.*,
+        t.tipo_descripcion,
+        ta.talla_descripcion,
+
+        -- ✅ finales (orden manda si existe)
+        COALESCE(NULLIF(o.orden_peso_otro,''), p.peso_descripcion) AS peso_descripcion,
+        COALESCE(NULLIF(o.orden_glaseo_otro,''), g.glaseo_cantidad) AS glaseo_cantidad,
+
+        c.coche_descripcion,
+        o.orden_microlote
       FROM ingresotunel i
       LEFT JOIN tipo t ON i.tipo_id = t.tipo_id
       LEFT JOIN talla ta ON i.talla_id = ta.talla_id
       LEFT JOIN peso p ON i.peso_id = p.peso_id
+      LEFT JOIN glaseo g ON i.glaseo_id = g.glaseo_id
       LEFT JOIN coche c ON i.coche_id = c.coche_id
       LEFT JOIN orden o ON i.orden_id = o.orden_id
       WHERE i.lote_id = ?
       ORDER BY i.ingresotunel_fecha DESC
     `, [lote_id]);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 // GET por ID con JOINs para descripciones
