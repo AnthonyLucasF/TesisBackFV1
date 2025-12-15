@@ -1,4 +1,4 @@
-import { conmysql } from "../db.js";
+/* import { conmysql } from "../db.js";
 
 //   GET: Todas las órdenes con talla, pendientes y sobrantes
 export const getOrden = async (req, res) => {
@@ -256,6 +256,379 @@ export const deleteOrden = async (req, res) => {
     res.status(202).json({ message: "Orden eliminada con éxito" });
 
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+ */
+
+
+import { conmysql } from "../db.js";
+
+/**
+ * Helper: obtiene la descripción de talla (talla_descripcion) desde talla_id
+ * para forzar orden_talla_marcada = talla seleccionada.
+ */
+async function getTallaDescripcionById(tallaId) {
+  const [rows] = await conmysql.query(
+    "SELECT talla_descripcion FROM talla WHERE talla_id = ? LIMIT 1",
+    [tallaId]
+  );
+  return rows.length ? rows[0].talla_descripcion : null;
+}
+
+// GET: Todas las órdenes con talla, pendientes y sobrantes (+ peso y glaseo si existen)
+export const getOrden = async (req, res) => {
+  try {
+    const [result] = await conmysql.query(`
+      SELECT 
+        o.*, 
+        t.talla_descripcion,
+        GREATEST(o.orden_total_libras - IFNULL(SUM(i.ingresotunel_total), 0), 0) AS orden_libras_pendientes,
+        GREATEST(IFNULL(SUM(i.ingresotunel_total), 0) - o.orden_total_libras, 0) AS orden_libras_sobrantes
+      FROM orden o
+      LEFT JOIN talla t ON o.talla_id = t.talla_id
+      LEFT JOIN ingresotunel i ON o.orden_id = i.orden_id
+      GROUP BY o.orden_id
+      ORDER BY o.orden_fecha_produccion DESC
+    `);
+
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al consultar Órdenes" });
+  }
+};
+
+// GET: Orden por ID con pendientes y sobrantes
+export const getOrdenxid = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ message: "ID de orden inválido" });
+
+    const [result] = await conmysql.query(
+      `
+      SELECT 
+        o.*, 
+        t.talla_descripcion,
+        GREATEST(o.orden_total_libras - IFNULL(SUM(i.ingresotunel_total), 0), 0) AS orden_libras_pendientes,
+        GREATEST(IFNULL(SUM(i.ingresotunel_total), 0) - o.orden_total_libras, 0) AS orden_libras_sobrantes
+      FROM orden o
+      LEFT JOIN talla t ON o.talla_id = t.talla_id
+      LEFT JOIN ingresotunel i ON o.orden_id = i.orden_id
+      WHERE o.orden_id = ?
+      GROUP BY o.orden_id
+      `,
+      [id]
+    );
+
+    if (!result.length)
+      return res.status(404).json({ orden_id: 0, message: "Orden no encontrada" });
+
+    res.json(result[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error del Servidor" });
+  }
+};
+
+// GET: Órdenes pendientes por talla (solo las que faltan por empacar)
+export const getOrdenesPendientes = async (req, res) => {
+  try {
+    const { talla_id } = req.query;
+    const tallaId = Number(talla_id);
+
+    if (!tallaId) return res.status(400).json({ message: "talla_id required" });
+
+    const [result] = await conmysql.query(
+      `
+      SELECT 
+        o.*, 
+        t.talla_descripcion,
+        GREATEST(o.orden_total_libras - IFNULL(SUM(i.ingresotunel_total), 0), 0) AS orden_libras_pendientes,
+        GREATEST(IFNULL(SUM(i.ingresotunel_total), 0) - o.orden_total_libras, 0) AS orden_libras_sobrantes
+      FROM orden o
+      LEFT JOIN talla t ON o.talla_id = t.talla_id
+      LEFT JOIN ingresotunel i ON o.orden_id = i.orden_id
+      WHERE o.talla_id = ?
+      GROUP BY o.orden_id
+      HAVING orden_libras_pendientes > 0
+      ORDER BY o.orden_fecha_produccion ASC
+      `,
+      [tallaId]
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// POST: Crear orden
+// - pendientes = total
+// - sobrantes = 0
+// - orden_talla_marcada = talla_descripcion según talla_id seleccionado
+export const postOrden = async (req, res) => {
+  try {
+    const {
+      orden_codigo,
+      orden_descripcion,
+      orden_cliente,
+      orden_lote_cliente,
+      orden_fecha_produccion,
+      orden_fecha_juliana,
+      orden_talla_real,
+      orden_microlote,
+      orden_total_master,
+      orden_total_libras,
+      talla_id,
+      peso_id,
+      glaseo_id
+    } = req.body;
+
+    const totalMaster = Number(orden_total_master) || 0;
+    const totalLibras = Number(orden_total_libras);
+    const tallaId = Number(talla_id) || 0;
+    const pesoId = peso_id != null ? Number(peso_id) : null;
+    const glaseoId = glaseo_id != null ? Number(glaseo_id) : null;
+
+    if (isNaN(totalLibras) || totalLibras <= 0) {
+      return res.status(400).json({ message: "orden_total_libras requerido y mayor a 0" });
+    }
+    if (tallaId <= 0) {
+      return res.status(400).json({ message: "talla_id requerido y mayor a 0" });
+    }
+
+    // Forzar orden_talla_marcada a lo que corresponde al talla_id
+    const tallaMarcada = await getTallaDescripcionById(tallaId);
+    if (!tallaMarcada) {
+      return res.status(400).json({ message: "talla_id no existe" });
+    }
+
+    const orden_libras_pendientes = totalLibras;
+    const orden_libras_sobrantes = 0;
+    const orden_estado = "pendiente";
+
+    const [insert] = await conmysql.query(
+      `
+      INSERT INTO orden (
+        orden_codigo, orden_descripcion, orden_cliente, orden_lote_cliente,
+        orden_fecha_produccion, orden_fecha_juliana, orden_talla_real,
+        orden_talla_marcada, orden_microlote, orden_total_master,
+        orden_total_libras, orden_libras_pendientes, orden_libras_sobrantes,
+        orden_estado, talla_id, peso_id, glaseo_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        orden_codigo || null,
+        orden_descripcion || null,
+        orden_cliente || null,
+        orden_lote_cliente || null,
+        orden_fecha_produccion || null,
+        orden_fecha_juliana || null,
+        orden_talla_real || null,
+        tallaMarcada, // <- forzado
+        orden_microlote || null,
+        totalMaster,
+        totalLibras,
+        orden_libras_pendientes,
+        orden_libras_sobrantes,
+        orden_estado,
+        tallaId,
+        pesoId,
+        glaseoId
+      ]
+    );
+
+    const nuevoId = insert.insertId;
+
+    // Devuelve la orden creada con talla_descripcion y cálculo
+    const [nuevo] = await conmysql.query(
+      `
+      SELECT 
+        o.*,
+        t.talla_descripcion,
+        GREATEST(o.orden_total_libras - IFNULL(SUM(i.ingresotunel_total), 0), 0) AS orden_libras_pendientes,
+        GREATEST(IFNULL(SUM(i.ingresotunel_total), 0) - o.orden_total_libras, 0) AS orden_libras_sobrantes
+      FROM orden o
+      LEFT JOIN talla t ON o.talla_id = t.talla_id
+      LEFT JOIN ingresotunel i ON o.orden_id = i.orden_id
+      WHERE o.orden_id = ?
+      GROUP BY o.orden_id
+      `,
+      [nuevoId]
+    );
+
+    global._io?.emit("orden_nueva", nuevo[0]);
+
+    res.json(nuevo[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// PUT: Actualizar orden
+// - recalcula pendientes y sobrantes
+// - orden_talla_marcada = talla_descripcion de talla_id (forzado)
+export const putOrden = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ordenId = Number(id);
+
+    if (!ordenId) return res.status(400).json({ message: "ID de orden inválido" });
+
+    const {
+      orden_codigo,
+      orden_descripcion,
+      orden_cliente,
+      orden_lote_cliente,
+      orden_fecha_produccion,
+      orden_fecha_juliana,
+      orden_talla_real,
+      orden_microlote,
+      orden_total_master,
+      orden_total_libras,
+      talla_id,
+      peso_id,
+      glaseo_id
+    } = req.body;
+
+    const totalMaster = Number(orden_total_master) || 0;
+    const totalLibras = Number(orden_total_libras);
+    const tallaId = Number(talla_id) || 0;
+    const pesoId = peso_id != null ? Number(peso_id) : null;
+    const glaseoId = glaseo_id != null ? Number(glaseo_id) : null;
+
+    if (isNaN(totalLibras) || totalLibras <= 0) {
+      return res.status(400).json({ message: "orden_total_libras requerido y mayor a 0" });
+    }
+    if (tallaId <= 0) {
+      return res.status(400).json({ message: "talla_id requerido y mayor a 0" });
+    }
+
+    // Obtener libras ya empacadas
+    const [agg] = await conmysql.query(
+      "SELECT IFNULL(SUM(ingresotunel_total), 0) AS empacadas FROM ingresotunel WHERE orden_id = ?",
+      [ordenId]
+    );
+    const empacadas = Number(agg[0].empacadas) || 0;
+
+    // No permitir reducir total por debajo de lo empacado
+    if (totalLibras < empacadas) {
+      return res.status(400).json({
+        message: `No puedes establecer ${totalLibras} libras porque ya existen ${empacadas} libras ingresadas`
+      });
+    }
+
+    // Forzar orden_talla_marcada a la descripción real del catálogo
+    const tallaMarcada = await getTallaDescripcionById(tallaId);
+    if (!tallaMarcada) {
+      return res.status(400).json({ message: "talla_id no existe" });
+    }
+
+    // Calcular pendientes y sobrantes
+    let orden_libras_pendientes = totalLibras - empacadas;
+    let orden_libras_sobrantes = 0;
+
+    if (orden_libras_pendientes < 0) {
+      orden_libras_sobrantes = Math.abs(orden_libras_pendientes);
+      orden_libras_pendientes = 0;
+    }
+
+    const orden_estado = orden_libras_pendientes > 0 ? "pendiente" : "cumplida";
+
+    // Actualizar orden en DB
+    const [update] = await conmysql.query(
+      `
+      UPDATE orden SET
+        orden_codigo = ?,
+        orden_descripcion = ?,
+        orden_cliente = ?,
+        orden_lote_cliente = ?,
+        orden_fecha_produccion = ?,
+        orden_fecha_juliana = ?,
+        orden_talla_real = ?,
+        orden_talla_marcada = ?,
+        orden_microlote = ?,
+        orden_total_master = ?,
+        orden_total_libras = ?,
+        orden_libras_pendientes = ?,
+        orden_libras_sobrantes = ?,
+        orden_estado = ?,
+        talla_id = ?,
+        peso_id = ?,
+        glaseo_id = ?
+      WHERE orden_id = ?
+      `,
+      [
+        orden_codigo || null,
+        orden_descripcion || null,
+        orden_cliente || null,
+        orden_lote_cliente || null,
+        orden_fecha_produccion || null,
+        orden_fecha_juliana || null,
+        orden_talla_real || null,
+        tallaMarcada, // <- forzado
+        orden_microlote || null,
+        totalMaster,
+        totalLibras,
+        orden_libras_pendientes,
+        orden_libras_sobrantes,
+        orden_estado,
+        tallaId,
+        pesoId,
+        glaseoId,
+        ordenId
+      ]
+    );
+
+    if (!update.affectedRows) {
+      return res.status(404).json({ message: "Orden no encontrada" });
+    }
+
+    // Obtener orden actualizada (con cálculo)
+    const [actualizado] = await conmysql.query(
+      `
+      SELECT 
+        o.*,
+        t.talla_descripcion,
+        GREATEST(o.orden_total_libras - IFNULL(SUM(i.ingresotunel_total), 0), 0) AS orden_libras_pendientes,
+        GREATEST(IFNULL(SUM(i.ingresotunel_total), 0) - o.orden_total_libras, 0) AS orden_libras_sobrantes
+      FROM orden o
+      LEFT JOIN talla t ON o.talla_id = t.talla_id
+      LEFT JOIN ingresotunel i ON o.orden_id = i.orden_id
+      WHERE o.orden_id = ?
+      GROUP BY o.orden_id
+      `,
+      [ordenId]
+    );
+
+    global._io?.emit("orden_actualizada", actualizado[0]);
+    if (orden_estado === "cumplida") global._io?.emit("orden_cumplida", actualizado[0]);
+
+    res.json(actualizado[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// DELETE: Eliminar orden y emitir evento
+export const deleteOrden = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ordenId = Number(id);
+
+    if (!ordenId) return res.status(400).json({ message: "ID inválido" });
+
+    await conmysql.query("DELETE FROM orden WHERE orden_id = ?", [ordenId]);
+
+    global._io?.emit("orden_eliminada", { orden_id: ordenId });
+
+    res.status(202).json({ message: "Orden eliminada con éxito" });
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
