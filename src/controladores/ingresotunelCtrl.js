@@ -401,7 +401,9 @@ export const deleteIngresoTunel = async (req, res) => {
 
         // Fetch para ajustar pendientes
         const [ingreso] = await conmysql.query('SELECT orden_id, ingresotunel_total FROM ingresotunel WHERE ingresotunel_id = ?', [id]);
-        const ordenId = ingreso[0].orden_id;
+        //const ordenId = ingreso[0].orden_id;
+        const ordenId = Number(req.body.orden_id || 0);
+        req.body.orden_id = ordenId > 0 ? ordenId : null;
         const total = ingreso[0].ingresotunel_total;
 
         await conmysql.query('DELETE FROM ingresotunel WHERE ingresotunel_id = ?', [id]);
