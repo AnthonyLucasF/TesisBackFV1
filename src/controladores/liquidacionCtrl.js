@@ -476,13 +476,29 @@ export const postLiquidacion = async (req, res) => {
     );
 
     // Lote (para rendimiento)
+    /*     const [[lot]] = await conmysql.query(
+          `SELECT lote_peso_promedio, parent_lote_id FROM lote WHERE lote_id = ?`,
+          [lote_id]
+        ); */
+
     const [[lot]] = await conmysql.query(
-      `SELECT lote_peso_promedio, parent_lote_id FROM lote WHERE lote_id = ?`,
+      `SELECT lote_peso_promedio, lote_libras_remitidas, lote_n_bines, parent_lote_id
+   FROM lote
+   WHERE lote_id = ?`,
       [lote_id]
     );
 
-    const pesoPromedio = num(lot?.lote_peso_promedio);
+    const pesoPromedio = num(lot?.lote_peso_promedio);        // lb/bin
+    const librasRemitidas = num(lot?.lote_libras_remitidas);  // lb total lote (lo más confiable)
+    const nBines = num(lot?.lote_n_bines);
     const parentLoteId = num(lot?.parent_lote_id);
+
+    // ✅ base total lote (prioriza remitidas; fallback: promedio*bines)
+    const baseTotal = librasRemitidas > 0 ? librasRemitidas : (pesoPromedio * nBines);
+
+
+    //const pesoPromedio = num(lot?.lote_peso_promedio);
+    //const parentLoteId = num(lot?.parent_lote_id);
 
     // Cargar ingresos del lote y tipo (con textos finales de orden para detalle)
     const [ing] = await conmysql.query(
@@ -532,11 +548,22 @@ export const postLiquidacion = async (req, res) => {
       parentBasura = num(pIng?.[0]?.bas);
     }
 
+    /*     let rendimiento = 0;
+        if (map.tipoId === 1) {
+          rendimiento = pesoPromedio > 0 ? (totalEmpacado / pesoPromedio) * 100 : 0;
+        } else {
+          const base = pesoPromedio - parentBasura - totalBasura;
+          rendimiento = base > 0 ? (totalEmpacado / base) * 100 : 0;
+        } */
+
     let rendimiento = 0;
+
     if (map.tipoId === 1) {
-      rendimiento = pesoPromedio > 0 ? (totalEmpacado / pesoPromedio) * 100 : 0;
+      // ENTERO: empacado / base total * 100
+      rendimiento = baseTotal > 0 ? (totalEmpacado / baseTotal) * 100 : 0;
     } else {
-      const base = pesoPromedio - parentBasura - totalBasura;
+      // COLA: deja tu lógica actual si ya está validada
+      const base = baseTotal - parentBasura - totalBasura; // o tu fórmula final
       rendimiento = base > 0 ? (totalEmpacado / base) * 100 : 0;
     }
 
