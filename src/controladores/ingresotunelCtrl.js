@@ -12,9 +12,9 @@ export const getIngresoTunel = async (req, res) => {
 
 // SELECT por lote_id (para resumen entero/cola)
 export const getIngresoTunelPorLote = async (req, res) => {
-  try {
-    const { lote_id } = req.params;
-    const [result] = await conmysql.query(`
+    try {
+        const { lote_id } = req.params;
+        const [result] = await conmysql.query(`
       SELECT i.*, t.tipo_descripcion, ta.talla_descripcion, p.peso_descripcion,
              c.coche_descripcion, o.orden_microlote
       FROM ingresotunel i
@@ -26,21 +26,25 @@ export const getIngresoTunelPorLote = async (req, res) => {
       WHERE i.lote_id = ?
       ORDER BY i.ingresotunel_fecha DESC
     `, [lote_id]);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
 // GET por ID con JOINs para descripciones
 export const getIngresoTunelxid = async (req, res) => {
-  try {
-    const [result] = await conmysql.query(`
+    try {
+        const [result] = await conmysql.query(`
       SELECT i.*, 
         l.lote_codigo AS lote_codigo,
         t.tipo_descripcion AS tipo_descripcion,
         ta.talla_descripcion AS talla_descripcion,
-        p.peso_descripcion AS peso_descripcion,
+
+        -- ✅ Peso y glaseo finales (si la orden tiene "Otro", se ve el valor)
+        COALESCE(NULLIF(o.orden_peso_otro,''), p.peso_descripcion) AS peso_descripcion,
+        COALESCE(NULLIF(o.orden_glaseo_otro,''), gl.glaseo_cantidad) AS glaseo_cantidad,
+
         pr.proveedor_nombre AS proveedor_nombre,
         cl.clase_descripcion AS clase_descripcion,
         co.color_descripcion AS color_descripcion,
@@ -50,7 +54,9 @@ export const getIngresoTunelxid = async (req, res) => {
         pt.presentacion_descripcion AS presentacion_descripcion,
         ch.coche_descripcion AS coche_descripcion,
         ch.coche_estado AS coche_estado,
-        gl.glaseo_cantidad AS glaseo_cantidad,
+
+        o.orden_microlote AS orden_microlote,
+
         (i.ingresotunel_total - i.ingresotunel_sobrante - i.ingresotunel_basura) / 
         NULLIF(l.lote_peso_promedio, 0) * 100 AS rendimiento_calculado
       FROM ingresotunel i
@@ -67,18 +73,22 @@ export const getIngresoTunelxid = async (req, res) => {
       LEFT JOIN presentacion pt ON i.presentacion_id = pt.presentacion_id
       LEFT JOIN coche ch ON i.coche_id = ch.coche_id
       LEFT JOIN glaseo gl ON i.glaseo_id = gl.glaseo_id
+
+      -- ✅ Necesario para leer orden_peso_otro / orden_glaseo_otro
+      LEFT JOIN orden o ON i.orden_id = o.orden_id
+
       WHERE i.ingresotunel_id = ?
     `, [req.params.id]);
 
-    if (!result || result.length === 0) {
-      return res.status(404).json({ ingresotunel_id: 0, message: "Ingreso no encontrado" });
-    }
+        if (!result || result.length === 0) {
+            return res.status(404).json({ ingresotunel_id: 0, message: "Ingreso no encontrado" });
+        }
 
-    res.json(result[0]);
-  } catch (error) {
-    console.error("Error en getIngresoTunelxid:", error);
-    return res.status(500).json({ message: "Error del Servidor", detalle: error.message });
-  }
+        res.json(result[0]);
+    } catch (error) {
+        console.error("Error en getIngresoTunelxid:", error);
+        return res.status(500).json({ message: "Error del Servidor", detalle: error.message });
+    }
 };
 
 // GET rendimiento por lote_id (total_procesado, rendimiento)
