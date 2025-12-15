@@ -543,6 +543,7 @@ export const postLiquidacion = async (req, res) => {
     }
 
     // Agrupar detalle (libras = empacado por grupo = Σsubtotales)
+    // Agrupar detalle (libras = empacado por grupo = Σsubtotales)
     const detMap = {};
 
     ing.forEach(i => {
@@ -568,18 +569,29 @@ export const postLiquidacion = async (req, res) => {
           presentacion: i.presentacion_descripcion,
           peso: i.peso_final,
           cajas: 0,
-          coches: 0,
-          libras: 0
+          libras: 0,
+
+          // ✅ coches únicos (por coche_id)
+          _cochesSet: new Set()
         };
       }
 
-      // ✅ FIX: n_cajas correcto
       detMap[key].cajas += num(i.ingresotunel_n_cajas);
-      detMap[key].coches += 1;
       detMap[key].libras += num(i.ingresotunel_subtotales);
+
+      // ✅ Cuenta coches únicos
+      const cocheId = num(i.coche_id);
+      if (cocheId > 0) detMap[key]._cochesSet.add(cocheId);
     });
 
-    const totalCajas = Object.values(detMap).reduce((s, d) => s + num(d.cajas), 0);
+    // ✅ Totales globales coherentes con detalles
+    const detallesArr = Object.values(detMap).map(d => ({
+      ...d,
+      coches: d._cochesSet.size
+    }));
+
+    const totalCajas = detallesArr.reduce((s, d) => s + num(d.cajas), 0);
+    const totalCoches = detallesArr.reduce((s, d) => s + num(d.coches), 0);
 
     // Insert cabecera: guardamos EMPACADO en liquidacion_total_libras
     const [ins] = await conmysql.query(
@@ -604,14 +616,14 @@ export const postLiquidacion = async (req, res) => {
     const liquidacion_id = ins.insertId;
 
     // Insert detalles
-    for (const d of Object.values(detMap)) {
+    for (const d of detallesArr) {
       await conmysql.query(
         `
-        INSERT INTO liquidacion_detalle
-        (liquidacion_id, talla, clase, color, corte, peso, glaseo,
-         presentacion, orden, cajas, coches, libras)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
+    INSERT INTO liquidacion_detalle
+    (liquidacion_id, talla, clase, color, corte, peso, glaseo,
+     presentacion, orden, cajas, coches, libras)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
         [
           liquidacion_id,
           d.talla, d.clase, d.color, d.corte, d.peso,
@@ -628,6 +640,8 @@ export const postLiquidacion = async (req, res) => {
       total_basura: totalBasura,
       total_clasificado: 0,
       total_procesado: totalProcesado,
+      total_cajas: totalCajas,
+      total_coches: totalCoches,
       rendimiento: Number(rendimiento.toFixed(2))
     });
 
