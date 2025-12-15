@@ -292,7 +292,8 @@ export const postLiquidacion = async (req, res) => {
 };
  */
 
-// src/controladores/liquidacionCtrl.js
+
+
 import { conmysql } from "../db.js";
 
 /* ================================================================
@@ -311,6 +312,7 @@ const mapTipoBD = (tipo) => {
 
 /* ================================================================
    GET /liquidacion?tipo=entero|cola
+   Devuelve campos ya listos: empacado/sobrante/basura/clasificado/procesado
 ================================================================ */
 export const getLiquidaciones = async (req, res) => {
   try {
@@ -329,11 +331,13 @@ export const getLiquidaciones = async (req, res) => {
         lo.lote_n_bines,
         li.liquidacion_tipo,
         li.liquidacion_rendimiento,
-        li.liquidacion_basura,
-        li.liquidacion_sobrante,
 
-        -- ✅ OJO: este campo lo usaremos como TOTAL EMPACADO (subtotales)
-        li.liquidacion_total_libras AS total_libras,
+        -- ✅ NUEVOS CAMPOS CLAROS
+        li.liquidacion_total_empacado   AS total_empacado,
+        li.liquidacion_total_sobrante   AS total_sobrante,
+        li.liquidacion_total_basura     AS total_basura,
+        li.liquidacion_total_clasificado AS total_clasificado,
+        li.liquidacion_total_procesado  AS total_procesado,
 
         li.total_cajas,
         li.liquidacion_fecha
@@ -341,7 +345,7 @@ export const getLiquidaciones = async (req, res) => {
       INNER JOIN lote lo ON lo.lote_id = li.lote_id
       WHERE li.liquidacion_tipo = ?
       ORDER BY li.liquidacion_id DESC
-    `,
+      `,
       [map.tipoBD]
     );
 
@@ -367,11 +371,12 @@ export const getLiquidacionxid = async (req, res) => {
         lo.lote_codigo,
         li.liquidacion_tipo,
         li.liquidacion_rendimiento,
-        li.liquidacion_basura,
-        li.liquidacion_sobrante,
 
-        -- ✅ aquí también: total_libras = total empacado
-        li.liquidacion_total_libras AS total_libras,
+        li.liquidacion_total_empacado   AS total_empacado,
+        li.liquidacion_total_sobrante   AS total_sobrante,
+        li.liquidacion_total_basura     AS total_basura,
+        li.liquidacion_total_clasificado AS total_clasificado,
+        li.liquidacion_total_procesado  AS total_procesado,
 
         li.total_cajas,
         li.liquidacion_fecha,
@@ -384,7 +389,7 @@ export const getLiquidacionxid = async (req, res) => {
       INNER JOIN lote lo     ON lo.lote_id      = li.lote_id
       LEFT JOIN proveedor pr ON pr.proveedor_id = lo.proveedor_id
       WHERE li.liquidacion_id = ?
-    `,
+      `,
       [id]
     );
 
@@ -397,30 +402,15 @@ export const getLiquidacionxid = async (req, res) => {
       SELECT 
         talla, clase, color, corte, peso, glaseo,
         presentacion, orden,
-        cajas, coches, libras
+        cajas, coches, libras_empacado, libras_sobrante, libras_basura, libras_procesado
       FROM liquidacion_detalle
       WHERE liquidacion_id = ?
       ORDER BY clase, talla, orden
-    `,
+      `,
       [id]
     );
 
-    // ✅ opcional: calculamos total_procesado en respuesta (sin tocar BD)
-    const empacado = Number(cab[0]?.total_libras || 0);
-    const sobrante = Number(cab[0]?.liquidacion_sobrante || 0);
-    const basura = Number(cab[0]?.liquidacion_basura || 0);
-    const clasificado = 0; // placeholder
-    const total_procesado = empacado + sobrante + basura + clasificado;
-
-    res.json({
-      cabecera: {
-        ...cab[0],
-        total_clasificado: clasificado,
-        total_procesado,
-      },
-      detalles: det,
-    });
-
+    res.json({ cabecera: cab[0], detalles: det });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -428,11 +418,11 @@ export const getLiquidacionxid = async (req, res) => {
 
 /* ================================================================
    POST /liquidacion
-   Reglas:
-   - Empacado = SUM(subtotales)
-   - Sobrante = SUM(sobrante)
-   - Basura = SUM(basura)
-   - Clasificado = 0 (placeholder)
+   REGLAS:
+   - Empacado = Σ subtotales
+   - Sobrante = Σ sobrantes
+   - Basura   = Σ basura
+   - Clasificado = 0 (por ahora)
    - Procesado = Empacado + Sobrante + Clasificado + Basura
 ================================================================ */
 export const postLiquidacion = async (req, res) => {
@@ -442,21 +432,7 @@ export const postLiquidacion = async (req, res) => {
     const map = mapTipoBD(tipo);
     if (!map) return res.status(400).json({ message: "Tipo inválido" });
 
-    /* -------------------------------------------------------
-       AUTOCORRECCIÓN TIPO EN INGRESOS
-    -------------------------------------------------------- */
-    await conmysql.query(
-      `
-      UPDATE ingresotunel 
-      SET tipo_id = ? 
-      WHERE lote_id = ? AND (tipo_id = 0 OR tipo_id IS NULL)
-      `,
-      [map.tipoId, lote_id]
-    );
-
-    /* -------------------------------------------------------
-       CARGAR INGRESOS (solo del tipo)
-    -------------------------------------------------------- */
+    // 1) Ingresos del lote por tipo
     const [ing] = await conmysql.query(
       `
       SELECT it.*,
@@ -467,7 +443,8 @@ export const postLiquidacion = async (req, res) => {
              p.peso_descripcion,
              g.glaseo_cantidad,
              pr.presentacion_descripcion,
-             o.orden_microlote
+             o.orden_microlote,
+             ch.coche_descripcion
       FROM ingresotunel it
       LEFT JOIN talla t ON it.talla_id=t.talla_id
       LEFT JOIN clase c ON it.clase_id=c.clase_id
@@ -477,78 +454,46 @@ export const postLiquidacion = async (req, res) => {
       LEFT JOIN glaseo g ON it.glaseo_id=g.glaseo_id
       LEFT JOIN presentacion pr ON it.presentacion_id=pr.presentacion_id
       LEFT JOIN orden o ON it.orden_id=o.orden_id
+      LEFT JOIN coche ch ON it.coche_id=ch.coche_id
       WHERE it.lote_id=? AND it.tipo_id=?
-    `,
+      `,
       [lote_id, map.tipoId]
     );
 
-    if (!ing.length) {
-      return res.status(400).json({ message: "No ingresos para este tipo" });
-    }
+    if (!ing.length) return res.status(400).json({ message: "No ingresos para este tipo" });
 
-    /* -------------------------------------------------------
-       LOTE (para rendimiento)
-    -------------------------------------------------------- */
+    // 2) Lote
     const [[lot]] = await conmysql.query(
-      `SELECT lote_peso_promedio FROM lote WHERE lote_id=?`,
+      `SELECT lote_libras_remitidas, lote_peso_promedio FROM lote WHERE lote_id=?`,
       [lote_id]
     );
-
     const pesoPromedio = Number(lot?.lote_peso_promedio || 0);
 
-    /* -------------------------------------------------------
-       SUMAS (REGLAS NUEVAS)
-       Empacado = SUM(subtotales)
-       Sobrante = SUM(sobrante)
-       Basura   = SUM(basura)
-       Clasificado (por ahora 0)
-       Procesado = Empacado + Sobrante + Clasificado + Basura
-    -------------------------------------------------------- */
+    // 3) ✅ SUMAS según reglas
     const totalEmpacado = ing.reduce((s, x) => s + Number(x.ingresotunel_subtotales || 0), 0);
     const totalSobrante = ing.reduce((s, x) => s + Number(x.ingresotunel_sobrante || 0), 0);
     const totalBasura = ing.reduce((s, x) => s + Number(x.ingresotunel_basura || 0), 0);
 
-    // ✅ placeholder
+    // ✅ apartado (ignorar por ahora)
     const totalClasificado = 0;
 
     const totalProcesado = totalEmpacado + totalSobrante + totalClasificado + totalBasura;
 
-    // ✅ total cajas correcto (tu tabla es ingresotunel_n_cajas)
-    const totalCajas = ing.reduce((s, x) => s + Number(x.ingresotunel_n_cajas || 0), 0);
+    // 4) Rendimiento (mantengo base simple: empacado sobre peso promedio)
+    //    Si luego quieres fórmula especial para cola, lo ajustamos aquí.
+    const rendimiento = pesoPromedio > 0 ? (totalEmpacado / pesoPromedio) * 100 : 0;
 
-    /* -------------------------------------------------------
-       RENDIMIENTO (consistente con cola/entero)
-       - Entero: empacado / pesoPromedio
-       - Cola: empacado / (pesoPromedio - basura)
-       (si pesoPromedio = 0 => 0)
-    -------------------------------------------------------- */
-    let rendimiento = 0;
-    if (tipo === "entero") {
-      rendimiento = pesoPromedio > 0 ? (totalEmpacado / pesoPromedio) * 100 : 0;
-    } else {
-      const base = pesoPromedio - totalBasura;
-      rendimiento = base > 0 ? (totalEmpacado / base) * 100 : 0;
-    }
-
-    /* -------------------------------------------------------
-       ELIMINAR LIQUIDACIÓN PREVIA (mismo lote + tipo)
-    -------------------------------------------------------- */
+    // 5) Eliminar liquidación previa (mismo lote + mismo tipo)
     const [old] = await conmysql.query(
       `SELECT liquidacion_id FROM liquidacion WHERE lote_id=? AND liquidacion_tipo=?`,
       [lote_id, map.tipoBD]
     );
-
     if (old.length) {
       await conmysql.query(`DELETE FROM liquidacion_detalle WHERE liquidacion_id=?`, [old[0].liquidacion_id]);
       await conmysql.query(`DELETE FROM liquidacion WHERE liquidacion_id=?`, [old[0].liquidacion_id]);
     }
 
-    /* -------------------------------------------------------
-       AGRUPACIÓN DETALLE
-       - libras = suma de SUBTOTALES (empacado)
-       - cajas  = suma de ingresotunel_n_cajas
-       - coches = conteo de registros (si quieres únicos por coche_id, te lo ajusto)
-    -------------------------------------------------------- */
+    // 6) Agrupar detalles (por clase/talla/orden/peso/etc.)
     const detMap = {};
 
     ing.forEach(i => {
@@ -575,76 +520,77 @@ export const postLiquidacion = async (req, res) => {
           peso: i.peso_descripcion,
           cajas: 0,
           coches: 0,
-          libras: 0
+          libras_empacado: 0,
+          libras_sobrante: 0,
+          libras_basura: 0,
+          libras_procesado: 0
         };
       }
 
-      detMap[key].cajas += Number(i.ingresotunel_n_cajas || 0);            // ✅
+      // ✅ OJO: tu campo real es ingresotunel_n_cajas (NO ingresotunel_cajas)
+      const cajas = Number(i.ingresotunel_n_cajas || 0);
+
+      const emp = Number(i.ingresotunel_subtotales || 0);
+      const sob = Number(i.ingresotunel_sobrante || 0);
+      const bas = Number(i.ingresotunel_basura || 0);
+      const cla = 0; // apartado
+
+      detMap[key].cajas += cajas;
       detMap[key].coches += 1;
-      detMap[key].libras += Number(i.ingresotunel_subtotales || 0);        // ✅ empacado real
+      detMap[key].libras_empacado += emp;
+      detMap[key].libras_sobrante += sob;
+      detMap[key].libras_basura += bas;
+      detMap[key].libras_procesado += (emp + sob + cla + bas);
     });
 
-    /* -------------------------------------------------------
-       INSERTAR CABECERA
-       - liquidacion_total_libras = TOTAL EMPACADO (subtotales)
-       - liquidacion_sobrante     = SUM(sobrantes)
-       - liquidacion_basura       = SUM(basura)
-       - total_cajas              = SUM(n_cajas)
-    -------------------------------------------------------- */
+    const totalCajas = Object.values(detMap).reduce((s, d) => s + Number(d.cajas || 0), 0);
+
+    // 7) Insertar cabecera (con columnas nuevas)
     const [ins] = await conmysql.query(
       `
       INSERT INTO liquidacion
       (lote_id, liquidacion_tipo, liquidacion_rendimiento,
-       liquidacion_basura, liquidacion_sobrante,
-       liquidacion_total_libras, total_cajas)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `,
+       liquidacion_total_empacado, liquidacion_total_sobrante,
+       liquidacion_total_basura, liquidacion_total_clasificado,
+       liquidacion_total_procesado, total_cajas)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
       [
         lote_id,
         map.tipoBD,
-        rendimiento,
-        totalBasura,
-        totalSobrante,
+        Number(rendimiento.toFixed(2)),
         totalEmpacado,
+        totalSobrante,
+        totalBasura,
+        totalClasificado,
+        totalProcesado,
         totalCajas
       ]
     );
 
     const liquidacion_id = ins.insertId;
 
-    /* -------------------------------------------------------
-       INSERTAR DETALLES
-    -------------------------------------------------------- */
+    // 8) Insertar detalles (con libras separadas)
     for (const d of Object.values(detMap)) {
       await conmysql.query(
         `
         INSERT INTO liquidacion_detalle
         (liquidacion_id, talla, clase, color, corte, peso, glaseo,
-         presentacion, orden, cajas, coches, libras)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
+         presentacion, orden, cajas, coches,
+         libras_empacado, libras_sobrante, libras_basura, libras_procesado)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
         [
           liquidacion_id,
           d.talla, d.clase, d.color, d.corte, d.peso,
           d.glaseo, d.presentacion, d.orden,
-          d.cajas, d.coches, d.libras
+          d.cajas, d.coches,
+          d.libras_empacado, d.libras_sobrante, d.libras_basura, d.libras_procesado
         ]
       );
     }
 
-    // ✅ devolvemos más info útil por si lo necesitas en frontend
-    res.json({
-      liquidacion_id,
-      totales: {
-        empacado: totalEmpacado,
-        sobrante: totalSobrante,
-        basura: totalBasura,
-        clasificado: totalClasificado,
-        procesado: totalProcesado,
-        rendimiento
-      }
-    });
-
+    res.json({ liquidacion_id });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message });
