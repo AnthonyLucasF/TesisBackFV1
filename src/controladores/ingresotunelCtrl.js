@@ -326,7 +326,7 @@ export const postIngresoTunel = async (req, res) => {
         ingresotunel_n_cajas, ingresotunel_libras_netas, ingresotunel_subtotales,
         ingresotunel_total, ingresotunel_sobrante, ingresotunel_basura,
         ingresotunel_rendimiento, ingresotunel_observaciones
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [
                 data.lote_id, data.usuario_id, data.proveedor_id, data.tipo_id, data.clase_id,
                 data.color_id, data.corte_id, data.talla_id, data.peso_id, data.glaseo_id,
