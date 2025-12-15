@@ -349,7 +349,11 @@ export const getLiquidaciones = async (req, res) => {
           COALESCE(SUM(it.ingresotunel_basura),0)
         ) AS total_procesado,
 
-        COALESCE(SUM(it.ingresotunel_n_cajas),0) AS total_cajas
+        COALESCE(SUM(it.ingresotunel_n_cajas),0) AS total_cajas,
+
+        -- ✅ coches reales (NO sumar det.coches): coches únicos usados en el lote/tipo
+        COUNT(DISTINCT it.coche_id) AS total_coches
+
       FROM liquidacion li
       INNER JOIN lote lo ON lo.lote_id = li.lote_id
       LEFT JOIN ingresotunel it 
